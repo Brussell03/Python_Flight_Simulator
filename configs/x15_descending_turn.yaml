@@ -1,0 +1,64 @@
+meta:
+    job_name: "X15_Descending_Turn"
+    description: "X-15 Mach 2.4 Descending Turn with Trim and Linearization"
+
+vehicle:
+    model: "X15"
+
+initial_conditions:
+    Mach: 2.4
+    alpha_deg: 1.0
+    beta_deg: 0.0
+    h_m: 16500.0
+    phi_deg: 0.0
+    theta_deg: 1.0
+    psi_deg: 0.0
+    dela_ach_deg: -1.0
+    dele_ach_deg: -1.0
+    delr_ach_deg: 1.0
+    lat_deg: 37.3
+    long_deg: -115.8
+    m_fuel_kg: 0.0
+    psidot_target_dps: 2.0  # Degrees per second for YAML readability
+
+simulation:
+    t0_s: 0.0
+    tf_s: 10.0
+    dt_s: 0.005
+
+control:
+    type: "doublet"
+    amplitude: 1.5
+    t1_s: 1.0
+    t2_s: 10.0
+    t3_s: 20.0
+    aileron: "off"
+    elevator: "off"
+    rudder: "off"
+    Kq: 12.0
+    Kp: -6.0
+    Kyar: 8.0
+    Kr: 8.0
+    trim_mode: "descending_turn"
+    trim_flag: "on"
+    throttle_percent: 0.0
+    linearization_flag: "off"
+    dela_cmd_deg: 0.0
+    dele_cmd_deg: 0.0
+    delr_cmd_deg: 0.0
+
+analysis:
+    perform_trim: true
+    perform_linearization: true
+
+    output:
+    save_data: true
+    save_dir: "./output_data/"
+    plot_dir: "./plots/"
+    figures:
+        - "6dof"
+        - "euler"
+        - "position"
+        - "air_data"
+        - "geodetic"
+        - "kinematics"

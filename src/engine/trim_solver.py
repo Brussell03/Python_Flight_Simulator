@@ -1,0 +1,327 @@
+import warnings
+import numpy as np
+import math
+from scipy.optimize import minimize
+
+from src.dynamics.eom_wgs84 import eom_wgs84
+from src.utils.constants import D2R, R2D, A_WGS84_M, G0_MPS2
+from src.utils.interpolators import fastInterp1
+
+def trim_solver(vehicle, amod, cmod, x_guess, u_guess, target_psidot_rps):
+    """
+    Finds the trimmed flight state by minimizing angular accelerations subject to kinematic constraints.
+    """
+    
+    # 1. Extract targets and initial guesses from the passed configuration vectors
+    h_target_m = x_guess[11]
+    c_snd = fastInterp1(amod['alt_m'], amod['c_mps'], h_target_m)
+    V_T_target_mps = x_guess[0] * c_snd
+    
+    alpha_guess_rad = x_guess[1]
+    beta_target_rad = x_guess[2]
+    p_target_rps = x_guess[3]
+    q_target_rps = x_guess[4]
+    r_target_rps = x_guess[5]
+    
+    phi_target_rad = x_guess[6]
+    theta_target_rad = x_guess[7]
+    psi_target_rad = x_guess[8]
+    
+    lat_target_rad = x_guess[9]
+    long_target_rad = x_guess[10]
+    m_fuel0_kg = x_guess[15]
+    
+    gamma_target_rad = theta_target_rad - alpha_guess_rad
+
+    # 2. Define Internal Optimizer Functions
+    def cost_function(x_trim, vehicle, amod, cmod):
+        # Unpack optimizer state
+        u, v, w = x_trim[0:3]
+        p, q, r = x_trim[3:6]
+        phi_rad, theta_rad, psi_rad = x_trim[6:9]
+        rest_of_state = x_trim[9:]
+
+        # Convert Euler to Quaternion (XYZ/321 sequence)
+        cphi, sphi = np.cos(phi_rad/2), np.sin(phi_rad/2)
+        cthe, sthe = np.cos(theta_rad/2), np.sin(theta_rad/2)
+        cpsi, spsi = np.cos(psi_rad/2), np.sin(psi_rad/2)
+
+        q0 = cphi * cthe * cpsi + sphi * sthe * spsi
+        q1 = sphi * cthe * cpsi - cphi * sthe * spsi
+        q2 = cphi * sthe * cpsi + sphi * cthe * spsi
+        q3 = cphi * cthe * spsi - sphi * sthe * cpsi
+
+        # Construct 17-element vector for EOM
+        x_full = np.concatenate(([u, v, w, p, q, r], [q0, q1, q2, q3], rest_of_state))
+        
+        dx = np.empty((17,), dtype=float)
+        auxillary_data = np.empty((16,), dtype=float)
+        
+        # Call the EOM
+        dx, auxillary_data = eom_wgs84(0, x_full, dx, auxillary_data, vehicle, amod, cmod)
+        
+        if cmod["trim_mode"] == 'steady_glide':
+            cost = dx[0]**2 + dx[1]**2 + dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2
+        elif cmod["trim_mode"] == 'moment_equilibrium':
+            cost = dx[3]**2 + dx[4]**2 + dx[5]**2
+        elif cmod["trim_mode"] == 'descending_turn':
+            p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[13], auxillary_data[14], auxillary_data[15]
+            psidot_current = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
+            cost = 0*dx[0]**2 + dx[1]**2 + 0*dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2 + 1e1*(psidot_current-target_psidot_rps)**2
+        else:
+            cost = dx[3]**2 + dx[4]**2 + dx[5]**2 # Fallback
+            
+        return cost
+
+    def define_trim_constraints():
+        def velocity_constraint(x_trim):
+            V_T_current_mps = math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2)
+            return V_T_current_mps - V_T_target_mps
+        
+        def beta_constraint(x_trim):
+            V_T_current_mps = math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2)
+            beta_current_rad = math.asin(x_trim[1]/V_T_current_mps)
+            return beta_current_rad - beta_target_rad
+        
+        def roll_rate_constraint(x_trim): return x_trim[3] - p_target_rps
+        def pitch_rate_constraint(x_trim): return x_trim[4] - q_target_rps
+        def yaw_rate_constraint(x_trim): return x_trim[5] - r_target_rps
+        def roll_constraint(x_trim): return x_trim[6] - phi_target_rad
+        def pitch_constraint(x_trim): return x_trim[7] - theta_target_rad
+        def yaw_constraint(x_trim): return x_trim[8] - psi_target_rad
+        def altitude_constraint(x_trim): return x_trim[11] - h_target_m
+        def latitude_constraint(x_trim): return x_trim[9] - lat_target_rad
+        def longitude_constraint(x_trim): return x_trim[10] - long_target_rad
+        def fuel_constraint(x_trim): return x_trim[15] - m_fuel0_kg
+        
+        def flight_path_angle_constraint(x_trim):
+            gamma_current_rad = x_trim[7] - math.atan2(x_trim[2], x_trim[0])
+            return gamma_current_rad - gamma_target_rad
+        
+        def theta_rate_of_climb_constraint(x_trim):
+            V_T_current_mps = math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2)
+            alpha_current_rad = math.atan(x_trim[2]/x_trim[0])
+            beta_current_rad = math.asin(x_trim[1]/V_T_current_mps)
+            gamma_current_rad = x_trim[7] - alpha_current_rad
+            
+            # Use unified WGS-84 Gravity Constants
+            h_m_current = x_trim[11]
+            s_lat = math.sin(x_trim[9])
+            g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
+            g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
+            
+            G = (target_psidot_rps * V_T_target_mps) / g_local
+            a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
+            b = math.sin(gamma_current_rad)/math.cos(beta_current_rad)
+            c = 1 + G**2*math.cos(beta_current_rad)**2
+            tan_phi_target_rad = G*(math.cos(beta_current_rad)/math.cos(alpha_current_rad))*\
+                ((a-b**2)+b*math.tan(alpha_current_rad)*math.sqrt(c*(1-b**2)+G**2*\
+                math.sin(beta_current_rad)**2))/(a**2-b**2*(1+c*math.tan(alpha_current_rad)**2))
+            phi_target_rad = math.atan(tan_phi_target_rad)
+            
+            a = math.cos(alpha_current_rad)*math.cos(beta_current_rad)
+            b = math.sin(phi_target_rad)*math.sin(beta_current_rad)+\
+                math.cos(phi_target_rad)*math.sin(alpha_current_rad)*\
+                math.cos(beta_current_rad)
+            sqrt_term_inside = a**2-math.sin(gamma_current_rad)**2+b**2
+            
+            if sqrt_term_inside < 0:
+                return 1e10
+                
+            numerator = a*b+math.sin(gamma_current_rad)*math.sqrt(sqrt_term_inside)
+            denominator = a**2-math.sin(gamma_current_rad)**2
+            theta_target_rad = math.atan(numerator/denominator)
+            return x_trim[7] - theta_target_rad
+        
+        def phi_turn_coord_constraint(x_trim):
+            V_T_current_mps = math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2)
+            alpha_current_rad = math.atan(x_trim[2]/x_trim[0])
+            beta_current_rad = math.asin(x_trim[1]/V_T_current_mps)
+            gamma_current_rad = x_trim[7] - alpha_current_rad
+            
+            h_m_current = x_trim[11] 
+            s_lat = math.sin(x_trim[9])
+            g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
+            g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
+            
+            G = (target_psidot_rps * V_T_target_mps) / g_local
+            a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
+            b = math.sin(gamma_current_rad)/math.cos(beta_current_rad)
+            c = 1 + G**2*math.cos(beta_current_rad)**2
+            tan_phi_target_rad = G*(math.cos(beta_current_rad)/math.cos(alpha_current_rad))*\
+                ((a-b**2)+b*math.tan(alpha_current_rad)*math.sqrt(c*(1-b**2)+G**2*\
+                math.sin(beta_current_rad)**2))/(a**2-b**2*(1+c*math.tan(alpha_current_rad)**2))
+            phi_target_rad = math.atan(tan_phi_target_rad)
+            return x_trim[6] - phi_target_rad
+
+        if cmod["trim_mode"] == 'steady_glide':
+            return [
+                {'type': 'eq', 'fun': velocity_constraint},
+                {'type': 'eq', 'fun': beta_constraint},
+                {'type': 'eq', 'fun': roll_rate_constraint},
+                {'type': 'eq', 'fun': pitch_rate_constraint},
+                {'type': 'eq', 'fun': yaw_rate_constraint},
+                {'type': 'eq', 'fun': altitude_constraint},
+                {'type': 'eq', 'fun': latitude_constraint},
+                {'type': 'eq', 'fun': longitude_constraint},
+                {'type': 'eq', 'fun': roll_constraint},
+                {'type': 'eq', 'fun': yaw_constraint},
+                {'type': 'eq', 'fun': fuel_constraint}
+            ]
+        elif cmod["trim_mode"] == 'moment_equilibrium':
+            return [
+                {'type': 'eq', 'fun': velocity_constraint},
+                {'type': 'eq', 'fun': beta_constraint},
+                {'type': 'eq', 'fun': roll_rate_constraint},
+                {'type': 'eq', 'fun': pitch_rate_constraint},
+                {'type': 'eq', 'fun': yaw_rate_constraint},
+                {'type': 'eq', 'fun': altitude_constraint},
+                {'type': 'eq', 'fun': flight_path_angle_constraint},
+                {'type': 'eq', 'fun': latitude_constraint},
+                {'type': 'eq', 'fun': longitude_constraint},
+                {'type': 'eq', 'fun': roll_constraint},
+                {'type': 'eq', 'fun': yaw_constraint},
+                {'type': 'eq', 'fun': fuel_constraint}
+            ]
+        elif cmod["trim_mode"] == 'descending_turn':
+            return [
+                {'type': 'eq', 'fun': velocity_constraint},
+                {'type': 'eq', 'fun': altitude_constraint},
+                {'type': 'eq', 'fun': theta_rate_of_climb_constraint},
+                {'type': 'eq', 'fun': phi_turn_coord_constraint},
+                {'type': 'eq', 'fun': roll_rate_constraint},
+                {'type': 'eq', 'fun': latitude_constraint},
+                {'type': 'eq', 'fun': longitude_constraint},
+                {'type': 'eq', 'fun': yaw_constraint},
+                {'type': 'eq', 'fun': fuel_constraint}
+            ]
+    
+    # 3. Setup and Execution
+    print("--- Unpowered Trim Solver ---")
+    cmod["trim_flag"] = 'on'
+
+    s_alpha = math.sin(alpha_guess_rad)
+    c_alpha = math.cos(alpha_guess_rad)
+    s_beta = math.sin(beta_target_rad)
+    c_beta = math.cos(beta_target_rad)
+
+    x0 = np.zeros(16)
+    x0[0]  = c_alpha * c_beta * V_T_target_mps
+    x0[1]  = s_beta * V_T_target_mps
+    x0[2]  = s_alpha * c_beta * V_T_target_mps
+    x0[3]  = p_target_rps 
+    x0[4]  = q_target_rps
+    x0[5]  = r_target_rps
+    x0[6]  = phi_target_rad
+    x0[7]  = theta_target_rad
+    x0[8]  = psi_target_rad
+    x0[9]  = lat_target_rad
+    x0[10] = long_target_rad
+    x0[11] = h_target_m
+    x0[12] = x_guess[12] # dela_ach_guess
+    x0[13] = x_guess[13] # dele_ach_guess
+    x0[14] = x_guess[14] # delr_ach_guess
+    x0[15] = m_fuel0_kg
+    
+    warnings.filterwarnings("ignore", category=RuntimeWarning, message="Values in x were outside bounds during a minimize step")
+
+    bounds = [(-np.inf, np.inf)] * 16
+    bounds[7]  = (-math.pi/3, math.pi/3)         
+    bounds[9]  = (-math.pi/2, math.pi/2)         
+    bounds[10] = (-math.pi, math.pi)             
+    bounds[11] = (0, np.inf)                     
+    bounds[12] = (-math.pi/4*R2D, math.pi/4*R2D)
+    bounds[13] = (-math.pi/4*R2D, math.pi/4*R2D)
+    bounds[14] = (-math.pi/4*R2D, math.pi/4*R2D)
+    bounds[15] = (0, vehicle.m_wet_kg - vehicle.m_dry_kg) # Dynamically accessed from vehicle object
+
+    print("Solving for trim state...")
+    result = minimize(
+        fun = cost_function,
+        x0 = x0,
+        args = (vehicle, amod, cmod),  
+        method = 'SLSQP',
+        bounds = bounds,
+        constraints = define_trim_constraints(),
+        options={'disp': True, 'ftol': 1e-8, 'maxiter': 300}
+    )
+    
+    # 4. Process Results
+    x_trim = result.x
+    phi_rad = x_trim[6]
+    theta_rad = x_trim[7]
+    psi_rad = x_trim[8]
+    
+    cphi, sphi = np.cos(x_trim[6]/2), np.sin(x_trim[6]/2)
+    cthe, sthe = np.cos(x_trim[7]/2), np.sin(x_trim[7]/2)
+    cpsi, spsi = np.cos(x_trim[8]/2), np.sin(x_trim[8]/2)
+
+    q0 = cphi * cthe * cpsi + sphi * sthe * spsi
+    q1 = sphi * cthe * cpsi - cphi * sthe * spsi
+    q2 = cphi * sthe * cpsi + sphi * cthe * spsi
+    q3 = cphi * cthe * spsi - sphi * sthe * cpsi
+    
+    dx = np.empty((17,), dtype=float)
+    auxillary_data = np.empty((16,), dtype=float)
+    
+    x_trim_full = np.concatenate((x_trim[0:6], [q0, q1, q2, q3], x_trim[9:]))
+    dx, auxillary_data = eom_wgs84(0, x_trim_full, dx, auxillary_data, vehicle, amod, cmod)
+
+    if result.success:
+        
+        # Calculate proper Euler Rates using kinematic equations
+        p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[13], auxillary_data[14], auxillary_data[15]
+        
+        phi_rad_dot   = p_nb_rps + q_nb_rps * math.sin(phi_rad) * math.tan(theta_rad) + r_nb_rps * math.cos(phi_rad) * math.tan(theta_rad)
+        theta_rad_dot = q_nb_rps * math.cos(phi_rad) - r_nb_rps * math.sin(phi_rad)
+        psi_rad_dot   = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
+        
+        print(f"Trim Successful! Cost function value: {result.fun:.3e}")
+        print("-" * 25)
+        print(f"VT_mps:    {math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2):.8f}")
+        print(f"alpha_deg: {math.atan2(x_trim[2], x_trim[0])*R2D:.8f}")
+        print(f"beta_deg:  {math.asin(x_trim[1]/math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2))*R2D:.8f}")
+        print(f"p_dps:     {x_trim[3]*R2D:.8f}")
+        print(f"q_dps:     {x_trim[4]*R2D:.8f}")
+        print(f"r_dps:     {x_trim[5]*R2D:.8f}")
+        print(f"phi_deg:   {phi_rad*R2D:.8f}")
+        print(f"theta_deg: {theta_rad*R2D:.8f}")
+        print(f"psi_deg:   {psi_rad*R2D:.8f}")
+        print(f"lat_deg:   {x_trim[9]*R2D:.8f}")
+        print(f"long_deg:  {x_trim[10]*R2D:.8f}")
+        print(f"alt_m:     {x_trim[11]:.8f}")
+        print(f"dela_deg:  {x_trim[12]:.8f}")
+        print(f"dele_deg:  {x_trim[13]:.8f}")
+        print(f"delr_deg:  {x_trim[14]:.8f}")
+        print(f"m_fuel_kg: {x_trim[15]:.8f}")
+        print(" ")
+        print(f"u_b_mps-dot:      {dx[0]: .8f}")
+        print(f"v_b_mps-dot:      {dx[1]: .8f}")
+        print(f"w_b_mps-dot:      {dx[2]: .8f}")
+        print(f"p_b_rps-dot:      {dx[3]: .8f}")
+        print(f"q_b_rps-dot:      {dx[4]: .8f}")
+        print(f"r_b_rps-dot:      {dx[5]: .8f}")
+        print(f"phi_rad-dot:      {phi_rad_dot: .8f}")
+        print(f"theta_rad-dot:    {theta_rad_dot: .8f}")
+        print(f"psi_rad-dot:      {psi_rad_dot: .8f}")
+        print(f"lat_deg-dot:      {dx[10]*R2D: .8f}")
+        print(f"long_deg-dot:     {dx[11]*R2D: .8f}")
+        print(f"alt_m-dot:        {dx[12]: .8f}")
+        print(f"dela_ach_deg-dot: {dx[13]: .8f}")
+        print(f"dele_ach_deg-dot: {dx[14]: .8f}")
+        print(f"delr_ach_deg-dot: {dx[15]: .8f}")
+        print(f"m_fuel_kg-dot:    {dx[16]: .8f}")
+        
+        # Package the trim controls for external use (like the B Matrix numerical derivation)
+        u_trim = np.array([
+            x_trim_full[13], # dela_cmd
+            x_trim_full[14], # dele_cmd
+            x_trim_full[15], # delr_cmd
+            u_guess[3]       # throttle pct
+        ])
+        
+        return x_trim_full, u_trim, result.message
+    else:
+        print(f"\n!!! TRIM FAILED TO CONVERGE !!!")
+        print(f"Message: {result.message}")
+        return None, None, result.message
