@@ -1,53 +1,52 @@
 meta:
-    job_name: "X15_Descending_Turn"
-    description: "X-15 Mach 2.4 Descending Turn with Trim and Linearization"
+    job_name: "X15_Dutch_Roll"
+    description: "X-15 Mach 3.0 Rudder Imuplse"
 
 vehicle:
     model: "X15"
 
 initial_conditions:
-    Mach: 2.4
-    alpha_deg: 1.0
+    Mach: 3.0
+    alpha_deg: 0.0
     beta_deg: 0.0
-    h_m: 16500.0
+    h_m: 21336.0
     phi_deg: 0.0
-    theta_deg: 1.0
+    theta_deg: 0.0
     psi_deg: 0.0
-    dela_ach_deg: -1.0
-    dele_ach_deg: -1.0
-    delr_ach_deg: 1.0
-    lat_deg: 37.3
-    long_deg: -115.8
+    dela_ach_deg: 0.0
+    dele_ach_deg: 0.0
+    delr_ach_deg: 0.0
+    lat_deg: 32.335556
+    long_deg: -106.405833
     m_fuel_kg: 0.0
-    psidot_target_dps: 2.0
+    psidot_target_dps: 0.0
 
 simulation:
     t0_s: 0.0
-    tf_s: 10.0
-    dt_s: 0.005
+    tf_s: 25.0
+    dt_s: 0.012
 
 control:
     type: "doublet"
-    amplitude: 1.5
+    amplitude: 4.0
     t1_s: 1.0
-    t2_s: 10.0
-    t3_s: 20.0
+    t2_s: 1.5
+    t3_s: 2.0
     aileron: false
     elevator: false
-    rudder: false
+    rudder: true
     Kq: 12.0
     Kp: -6.0
     Kyar: 8.0
-    Kr: 8.0
+    Kr: 0.0 # 8.0
     throttle_percent: 0.0
     dela_cmd_deg: 0.0
     dele_cmd_deg: 0.0
     delr_cmd_deg: 0.0
 
 analysis:
-    perform_trim: true
-    trim_mode: "descending_turn"
-    perform_linearization: true
+    perform_trim: false
+    perform_linearization: false
 
 output:
     save_data: true

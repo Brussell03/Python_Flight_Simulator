@@ -8,10 +8,9 @@ class SimulatorPlotter:
     Handles all visual output for the flight simulation.
     Maps data arrays to plots using specified indices.
     """
-    def __init__(self, data, plot_dir="./plots/"):
+    def __init__(self, data, plot_dir):
         self.data = data
         self.plot_dir = plot_dir
-        os.makedirs(self.plot_dir, exist_ok=True)
         
         # Map parameters by columns defined in sim_data
         self.t = self.data[:, 0]

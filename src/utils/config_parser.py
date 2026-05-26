@@ -31,30 +31,30 @@ def load_simulation_config(yaml_path):
     c0_mps = fastInterp1(alt_m, c_mps, h0_m)
     
     # Trig operations on initial angle of attack and sideslip
-    s_alpha   = math.sin(ic['alpha_deg']*D2R)
-    c_alpha   = math.cos(ic['alpha_deg']*D2R)
-    s_beta    = math.sin(ic['beta_deg']*D2R)
-    c_beta    = math.cos(ic['beta_deg']*D2R)
+    s_alpha   =    math.sin(ic['alpha_deg']*D2R)
+    c_alpha   =    math.cos(ic['alpha_deg']*D2R)
+    s_beta    =    math.sin(ic['beta_deg']*D2R)
+    c_beta    =    math.cos(ic['beta_deg']*D2R)
     
     u0_bf_mps  =   c_alpha*c_beta*ic['Mach']*c0_mps
     v0_bf_mps  =   s_beta*ic['Mach']*c0_mps
     w0_bf_mps  =   s_alpha*c_beta*ic['Mach']*c0_mps
     
-    p0_bf_rps  =   0*D2R
-    q0_bf_rps  =   0*D2R
-    r0_bf_rps  =   0*D2R
+    p0_bf_rps  =   ic['p_rps']
+    q0_bf_rps  =   ic['q_rps']
+    r0_bf_rps  =   ic['r_rps']
     
     phi0_rad   =   ic['phi_deg'] * D2R
     theta0_rad =   ic['theta_deg'] * D2R
     psi0_rad   =   ic['psi_deg'] * D2R
     
-    q0_0       = math.cos(psi0_rad/2)*math.cos(theta0_rad/2)*math.cos(phi0_rad/2) + math.sin(psi0_rad/2)*math.sin(theta0_rad/2)*math.sin(phi0_rad/2)
-    q1_0       = math.cos(psi0_rad/2)*math.cos(theta0_rad/2)*math.sin(phi0_rad/2) - math.sin(psi0_rad/2)*math.sin(theta0_rad/2)*math.cos(phi0_rad/2)
-    q2_0       = math.cos(psi0_rad/2)*math.sin(theta0_rad/2)*math.cos(phi0_rad/2) + math.sin(psi0_rad/2)*math.cos(theta0_rad/2)*math.sin(phi0_rad/2)
-    q3_0       = math.sin(psi0_rad/2)*math.cos(theta0_rad/2)*math.cos(phi0_rad/2) - math.cos(psi0_rad/2)*math.sin(theta0_rad/2)*math.sin(phi0_rad/2)
+    q0_0       =   math.cos(psi0_rad/2)*math.cos(theta0_rad/2)*math.cos(phi0_rad/2) + math.sin(psi0_rad/2)*math.sin(theta0_rad/2)*math.sin(phi0_rad/2)
+    q1_0       =   math.cos(psi0_rad/2)*math.cos(theta0_rad/2)*math.sin(phi0_rad/2) - math.sin(psi0_rad/2)*math.sin(theta0_rad/2)*math.cos(phi0_rad/2)
+    q2_0       =   math.cos(psi0_rad/2)*math.sin(theta0_rad/2)*math.cos(phi0_rad/2) + math.sin(psi0_rad/2)*math.cos(theta0_rad/2)*math.sin(phi0_rad/2)
+    q3_0       =   math.sin(psi0_rad/2)*math.cos(theta0_rad/2)*math.cos(phi0_rad/2) - math.cos(psi0_rad/2)*math.sin(theta0_rad/2)*math.sin(phi0_rad/2)
     
-    lat0_rad   = ic['lat_deg'] * D2R
-    long0_rad  = ic['long_deg'] * D2R
+    lat0_rad   =   ic['lat_deg'] * D2R
+    long0_rad  =   ic['long_deg'] * D2R
     
     dela_ach_deg = ic['dela_ach_deg'] * D2R
     dele_ach_deg = ic['dele_ach_deg'] * D2R
@@ -89,5 +89,9 @@ def load_simulation_config(yaml_path):
     ]
     
     u_guess = [0.0, 0.0, 0.0, config['control']['throttle_percent']]
+    
+    analysis = config['analysis']
+    analysis['trim_flag'] = analysis.get('trim_flag', 'off') # Defaults to 'off' if missing
+    analysis['linearization_flag'] = analysis.get('linearization_flag', 'off')
 
-    return vehicle, amod, config['control'], config['simulation'], ic, x0, x_guess, u_guess, config
+    return vehicle, amod, config['control'], config['simulation'], ic, x0, x_guess, u_guess, analysis, config

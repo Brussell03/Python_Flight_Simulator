@@ -7,7 +7,7 @@ from src.dynamics.eom_wgs84 import eom_wgs84
 from src.utils.constants import D2R, R2D, A_WGS84_M, G0_MPS2
 from src.utils.interpolators import fastInterp1
 
-def trim_solver(vehicle, amod, cmod, x_guess, u_guess, target_psidot_rps):
+def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_rps):
     """
     Finds the trimmed flight state by minimizing angular accelerations subject to kinematic constraints.
     """
@@ -60,11 +60,11 @@ def trim_solver(vehicle, amod, cmod, x_guess, u_guess, target_psidot_rps):
         # Call the EOM
         dx, auxillary_data = eom_wgs84(0, x_full, dx, auxillary_data, vehicle, amod, cmod)
         
-        if cmod["trim_mode"] == 'steady_glide':
+        if analysis["trim_mode"] == 'steady_glide':
             cost = dx[0]**2 + dx[1]**2 + dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2
-        elif cmod["trim_mode"] == 'moment_equilibrium':
+        elif analysis["trim_mode"] == 'moment_equilibrium':
             cost = dx[3]**2 + dx[4]**2 + dx[5]**2
-        elif cmod["trim_mode"] == 'descending_turn':
+        elif analysis["trim_mode"] == 'descending_turn':
             p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[13], auxillary_data[14], auxillary_data[15]
             psidot_current = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
             cost = 0*dx[0]**2 + dx[1]**2 + 0*dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2 + 1e1*(psidot_current-target_psidot_rps)**2
@@ -154,7 +154,7 @@ def trim_solver(vehicle, amod, cmod, x_guess, u_guess, target_psidot_rps):
             phi_target_rad = math.atan(tan_phi_target_rad)
             return x_trim[6] - phi_target_rad
 
-        if cmod["trim_mode"] == 'steady_glide':
+        if analysis["trim_mode"] == 'steady_glide':
             return [
                 {'type': 'eq', 'fun': velocity_constraint},
                 {'type': 'eq', 'fun': beta_constraint},
@@ -168,7 +168,7 @@ def trim_solver(vehicle, amod, cmod, x_guess, u_guess, target_psidot_rps):
                 {'type': 'eq', 'fun': yaw_constraint},
                 {'type': 'eq', 'fun': fuel_constraint}
             ]
-        elif cmod["trim_mode"] == 'moment_equilibrium':
+        elif analysis["trim_mode"] == 'moment_equilibrium':
             return [
                 {'type': 'eq', 'fun': velocity_constraint},
                 {'type': 'eq', 'fun': beta_constraint},
@@ -183,7 +183,7 @@ def trim_solver(vehicle, amod, cmod, x_guess, u_guess, target_psidot_rps):
                 {'type': 'eq', 'fun': yaw_constraint},
                 {'type': 'eq', 'fun': fuel_constraint}
             ]
-        elif cmod["trim_mode"] == 'descending_turn':
+        elif analysis["trim_mode"] == 'descending_turn':
             return [
                 {'type': 'eq', 'fun': velocity_constraint},
                 {'type': 'eq', 'fun': altitude_constraint},
@@ -198,7 +198,7 @@ def trim_solver(vehicle, amod, cmod, x_guess, u_guess, target_psidot_rps):
     
     # 3. Setup and Execution
     print("--- Unpowered Trim Solver ---")
-    cmod["trim_flag"] = 'on'
+    analysis["trim_flag"] = 'on'
 
     s_alpha = math.sin(alpha_guess_rad)
     c_alpha = math.cos(alpha_guess_rad)

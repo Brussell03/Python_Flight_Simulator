@@ -1,0 +1,63 @@
+meta:
+    job_name: "X15_Longitudinal_Test"
+    description: "X-15 Mach 3.25 Longitudinal Test"
+
+vehicle:
+    model: "X15"
+
+initial_conditions:
+    Mach: 3.25
+    alpha_deg: -2.0
+    beta_deg: 0.32
+    h_m: 17465.04
+    p_rps: 0.0
+    q_rps: 0.1
+    r_rps: 0.0
+    phi_deg: 0.0
+    theta_deg: 0.0
+    psi_deg: 0.0
+    dela_ach_deg: 0.0
+    dele_ach_deg: 0.0
+    delr_ach_deg: 0.0
+    lat_deg: 32.335556
+    long_deg: -106.405833
+    m_fuel_kg: 0.0
+    psidot_target_dps: 0.0
+
+simulation:
+    t0_s: 0.0
+    tf_s: 7.0
+    dt_s: 0.012
+
+control:
+    type: "time_history"
+    amplitude: 1.0
+    t1_s: 2.0
+    t2_s: 3.0
+    t3_s: 4.0
+    aileron: false # on if control input should act through it
+    elevator: true # on if control input should act through it
+    rudder: false  # on if control input should act through it
+    Kq: 0.0
+    Kp: -7.0
+    Kyar: 8.0
+    Kr: 8.0
+    throttle_percent: 0.0
+    dela_cmd_deg: 0.0
+    dele_cmd_deg: 0.0
+    delr_cmd_deg: 0.0
+
+analysis:
+    perform_trim: false
+    perform_linearization: false
+
+output:
+    save_data: true
+    save_dir: "./output_data/"
+    figures:
+        6dof: true
+        attitude: true
+        controls: true
+        aerodynamics: true
+        geodetic: true
+        ned_velocity: true

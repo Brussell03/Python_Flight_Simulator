@@ -14,20 +14,20 @@ from src.utils.constants import D2R, R2D, A_WGS84_M, E_WGS84, OMEGA_E_RPS
 
 def run_job(config_path):
     # 1. Initialization
-    vehicle, amod, cmod, sim_params, ic, x0, x_guess, u_guess, config = load_simulation_config(config_path)
+    vehicle, amod, cmod, sim_params, ic, x0, x_guess, u_guess, analysis, config = load_simulation_config(config_path)
     
     t0_s, tf_s, dt_s = sim_params['t0_s'], sim_params['tf_s'], sim_params['dt_s']
     state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
     
     # 2. Trim & Analysis Dispatch
-    if config.get('analysis', {}).get('perform_trim', False):
+    if analysis.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
-        x_trim, u_trim, msg = trim_solver(vehicle, amod, cmod, x_guess, u_guess, ic['psidot_target_dps'] * D2R)
+        x_trim, u_trim, msg = trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, ic['psidot_target_dps'] * D2R)
         
         if x_trim is not None:
             x0 = x_trim # Override initial conditions with trim state
             
-            if config.get('analysis', {}).get('perform_linearization', False):
+            if analysis.get('perform_linearization', False):
                 print("\n--- Executing Linearization ---")
                 
                 state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
@@ -271,20 +271,37 @@ def run_job(config_path):
 
     # 5. Output Management
     output_cfg = config.get('output', {})
-    if output_cfg.get('save_data'):
-        os.makedirs(output_cfg['save_dir'], exist_ok=True)
-        save_path = os.path.join(output_cfg['save_dir'], f"{config['meta']['job_name']}_{vehicle.short_name}.npy")
-        np.save(save_path, sim_data)
-        print(f"Data saved to {save_path}")
+    if output_cfg:
+        job_name = config['meta']['job_name']
+        base_out_dir = output_cfg.get('save_dir', './output_data/')
+        
+        # Define Job-Specific Directories
+        job_dir = os.path.join(base_out_dir, job_name)
+        data_dir = os.path.join(job_dir, "data")
+        plot_dir = os.path.join(job_dir, "plots")
+        
+        # Save Numerical Data
+        if output_cfg.get('save_data', False):
+            os.makedirs(data_dir, exist_ok=True)
+            save_path = os.path.join(data_dir, f"{job_name}.npy")
+            np.save(save_path, sim_data)
+            print(f"\n--- Output Saved ---")
+            print(f"Data saved to: {save_path}")
 
-    # Generate plots requested in config
-    plotter = SimulatorPlotter(sim_data)
-    plotter.plot_6dof()
-    plotter.plot_attitude()
-    plotter.plot_controls()
-    plotter.plot_aerodynamics()
-    plotter.plot_geodetic()
-    plotter.plot_ned_velocity()
+        # Dispatch Plots Based on Config Booleans
+        plot_cfg = output_cfg.get('figures', {})
+        if any(plot_cfg.values()): 
+            # Only instantiate plotter and make dir if at least one plot is True
+            os.makedirs(plot_dir, exist_ok=True)
+            plotter = SimulatorPlotter(sim_data, plot_dir=plot_dir)
+            
+            print(f"Generating plots to: {plot_dir}")
+            if plot_cfg.get('6dof', False):         plotter.plot_6dof()
+            if plot_cfg.get('attitude', False):     plotter.plot_attitude()
+            if plot_cfg.get('controls', False):     plotter.plot_controls()
+            if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics()
+            if plot_cfg.get('geodetic', False):     plotter.plot_geodetic()
+            if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity()
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py configs/x15_descending_turn.yaml

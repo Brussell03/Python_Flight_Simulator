@@ -77,19 +77,11 @@ def eom_wgs84(t, x, dx, auxillary_data, vehicle, amod, cmod):
     # Gravity
     gz_n_mps2 = G0_MPS2 * (1.0 + 0.00193185265241 * sin_lat**2) / math.sqrt(1.0 - 0.00669437999014 * sin_lat**2) * (A_WGS84_M / (A_WGS84_M + h_m))**2
     g_b_mps2 = C_n2b @ np.array([0.0, 0.0, gz_n_mps2])
-
-    # --- Vehicle Physics Interface ---
-    state_dict = {
-        'alpha_rad': alpha_rad, 'beta_rad': beta_rad, 'Mach': Mach, 'qbar_kgpms2': qbar_kgpms2, 'true_airspeed_mps': true_airspeed_mps,
-        'p_b_rps': p_b_rps, 'q_b_rps': q_b_rps, 'r_b_rps': r_b_rps
-    }
-    control_dict = {
-        'dela_ach_deg': dela_ach_deg, 'dele_ach_deg': dele_ach_deg, 'delr_ach_deg': delr_ach_deg, 
-        'delsb_deg': delsb_deg, 'throttle_perc': throttle_perc
-    }
     
     # Vehicle returns mapped body forces
-    Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2 = vehicle.get_forces_and_moments(state_dict, control_dict, C_w2b)
+    Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2 = vehicle.get_forces_and_moments(alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
+                                                                                                                  p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
+                                                                                                                  delr_ach_deg, delsb_deg, throttle_perc, C_w2b)
 
     # Velocity Equations (Coriolis)
     omega_cor_b_rps = np.array([p_b_rps, q_b_rps, r_b_rps]) + 2.0 * omega_ie_b_rps
