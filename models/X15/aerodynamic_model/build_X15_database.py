@@ -1,18 +1,15 @@
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sys
 import os
 
-# Calculate the absolute path to the 'tools' directory
-tools_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'tools')
-)
+# Add the project root folder to sys.path
+root_dir = Path(__file__).resolve().parents[3]
+sys.path.append(str(root_dir))
 
-# Add the 'tools' directory to sys.path
-sys.path.append(tools_dir)
-
-from Interpolators import fastInterp1, fastInterp2
+from src.utils.interpolators import fastInterp1, fastInterp2
 '''build_X15_database.py imports csv data to create an aerodynamic database for the 
 X-15 space plane. 
 
@@ -77,7 +74,7 @@ nMach_bps = len(Mach_bps)
 #-------------------------------------------------------------------------------
 
 # CL Table from comma separated variables exported from plot digitizer
-CL_for_AoA_Mach = pd.read_csv('vehicle_models/X15/aerodynamic_model/Walker60/data/CL_v_alpha_Walker60.csv', header = 0)
+CL_for_AoA_Mach = pd.read_csv('models/X15/aerodynamic_model/Walker60/data/CL_v_alpha_Walker60.csv', header = 0)
 
 # Get data sequences from the pandas DataFrame
 alpha_sample_deg   = CL_for_AoA_Mach['x'].values
@@ -156,7 +153,7 @@ if CL_vs_alpha_Mach_plot == 'on':
 
 # CLdele Table from comma separated variables exported from plot digitizer
 CLdele_for_AoA_p_dele_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/CLdele_v_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/CLdele_v_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -233,7 +230,7 @@ if CLdele_vs_Mach_AoA_p_dele_plot == 'on':
 
 # Cmalpha table from comma separated variables exported from plot digitizer
 Cmalpha_for_AoA_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cmalpha_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cmalpha_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -302,10 +299,10 @@ if Cmalpha_vs_Mach_plot == 'on':
 #-------------------------------------------------------------------------------
 
 # Cmalpha table from comma separated variables exported from plot digitizer
-Cmq_pdps_vs_Mach_alpha_deg_0  = pd.read_csv('vehicle_models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_0_Walker60.csv',  header = 0)
-Cmq_pdps_vs_Mach_alpha_deg_8  = pd.read_csv('vehicle_models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_8_Walker60.csv',  header = 0)
-Cmq_pdps_vs_Mach_alpha_deg_16 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_16_Walker60.csv', header = 0)
-Cmq_pdps_vs_Mach_alpha_deg_24 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_24_Walker60.csv', header = 0)
+Cmq_pdps_vs_Mach_alpha_deg_0  = pd.read_csv('models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_0_Walker60.csv',  header = 0)
+Cmq_pdps_vs_Mach_alpha_deg_8  = pd.read_csv('models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_8_Walker60.csv',  header = 0)
+Cmq_pdps_vs_Mach_alpha_deg_16 = pd.read_csv('models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_16_Walker60.csv', header = 0)
+Cmq_pdps_vs_Mach_alpha_deg_24 = pd.read_csv('models/X15/aerodynamic_model/Walker60/data/Cmq_prps_vs_Mach_alpha_deg_24_Walker60.csv', header = 0)
 
 # Get data sequences from the pandas DataFrame
 Mach_sample_for_alpha_deg_0   = Cmq_pdps_vs_Mach_alpha_deg_0['x'].values
@@ -376,7 +373,7 @@ if Cmq_pdeg_vs_Mach_plot == 'on':
 
 # Cmalpha table from comma separated variables exported from plot digitizer
 Cmdele_for_AoApdele_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cmdele_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cmdele_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -446,7 +443,7 @@ if Cmdele_vs_Mach_plot == 'on':
 
 # Clbeta Table from comma separated variables exported from plot digitizer
 Clbeta_for_AoA_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Clbeta_v_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Clbeta_v_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -520,18 +517,18 @@ if Clbeta_vs_Mach_alpha_plot == 'on':
 #-----------------------------------------------------------------------------------------------
 
 # a. CL v AoA from comma separated variables exported from plot digitizer
-CL_v_alpha_M1p1 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M1p1_Saltzmann66.csv', header = 0)
-CL_v_alpha_M1p7 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M1p7_Saltzmann66.csv', header = 0)
-CL_v_alpha_M1p9 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M1p9_Saltzmann66.csv', header = 0)
-CL_v_alpha_M2p4 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M2p4_Saltzmann66.csv', header = 0)
-CL_v_alpha_M2p6 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M2p6_Saltzmann66.csv', header = 0)
-CL_v_alpha_M2p9 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M2p9_Saltzmann66.csv', header = 0)
-CL_v_alpha_M3p1 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M3p1_Saltzmann66.csv', header = 0)
-CL_v_alpha_M3p3 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M3p3_Saltzmann66.csv', header = 0)
-CL_v_alpha_M3p7 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M3p7_Saltzmann66.csv', header = 0)
-CL_v_alpha_M4p1 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M4p1_Saltzmann66.csv', header = 0)
-CL_v_alpha_M5p5 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M5p5_Saltzmann66.csv', header = 0)
-CL_v_alpha_M6p0 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M6p0_Saltzmann66.csv', header = 0)
+CL_v_alpha_M1p1 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M1p1_Saltzmann66.csv', header = 0)
+CL_v_alpha_M1p7 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M1p7_Saltzmann66.csv', header = 0)
+CL_v_alpha_M1p9 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M1p9_Saltzmann66.csv', header = 0)
+CL_v_alpha_M2p4 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M2p4_Saltzmann66.csv', header = 0)
+CL_v_alpha_M2p6 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M2p6_Saltzmann66.csv', header = 0)
+CL_v_alpha_M2p9 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M2p9_Saltzmann66.csv', header = 0)
+CL_v_alpha_M3p1 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M3p1_Saltzmann66.csv', header = 0)
+CL_v_alpha_M3p3 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M3p3_Saltzmann66.csv', header = 0)
+CL_v_alpha_M3p7 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M3p7_Saltzmann66.csv', header = 0)
+CL_v_alpha_M4p1 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M4p1_Saltzmann66.csv', header = 0)
+CL_v_alpha_M5p5 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M5p5_Saltzmann66.csv', header = 0)
+CL_v_alpha_M6p0 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_alpha_deg_M6p0_Saltzmann66.csv', header = 0)
 
 # AoA bps for CD (points to interpolate to, what the final table is in terms of)
 alpha_bps_for_CD_deg  = np.arange(0, 25, 1, dtype = float)
@@ -602,18 +599,18 @@ for ii in range(0, nalpha_bps_for_CD_deg, 1):
     CL_v_alpha_M6p0_interp[ii] = fastInterp1(alpha_sample_M6p0, CL_v_alpha_M6p0_Saltzmann66, alpha_bps_for_CD_deg[ii])
     
 # 2. Import CL versus CD data that's extracted from the plot digitizer
-CL_v_CD_M1p1 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M1p1_Saltzmann66.csv', header = 0)
-CL_v_CD_M1p7 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M1p7_Saltzmann66.csv', header = 0)
-CL_v_CD_M1p9 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M1p9_Saltzmann66.csv', header = 0)
-CL_v_CD_M2p4 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M2p4_Saltzmann66.csv', header = 0)
-CL_v_CD_M2p6 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M2p6_Saltzmann66.csv', header = 0)
-CL_v_CD_M2p9 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M2p9_Saltzmann66.csv', header = 0)
-CL_v_CD_M3p1 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M3p1_Saltzmann66.csv', header = 0)
-CL_v_CD_M3p3 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M3p3_Saltzmann66.csv', header = 0)
-CL_v_CD_M3p7 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M3p7_Saltzmann66.csv', header = 0)
-CL_v_CD_M4p1 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M4p1_Saltzmann66.csv', header = 0)
-CL_v_CD_M5p5 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M5p5_Saltzmann66.csv', header = 0)
-CL_v_CD_M6p0 = pd.read_csv('vehicle_models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M6p0_Saltzmann66.csv', header = 0)
+CL_v_CD_M1p1 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M1p1_Saltzmann66.csv', header = 0)
+CL_v_CD_M1p7 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M1p7_Saltzmann66.csv', header = 0)
+CL_v_CD_M1p9 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M1p9_Saltzmann66.csv', header = 0)
+CL_v_CD_M2p4 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M2p4_Saltzmann66.csv', header = 0)
+CL_v_CD_M2p6 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M2p6_Saltzmann66.csv', header = 0)
+CL_v_CD_M2p9 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M2p9_Saltzmann66.csv', header = 0)
+CL_v_CD_M3p1 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M3p1_Saltzmann66.csv', header = 0)
+CL_v_CD_M3p3 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M3p3_Saltzmann66.csv', header = 0)
+CL_v_CD_M3p7 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M3p7_Saltzmann66.csv', header = 0)
+CL_v_CD_M4p1 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M4p1_Saltzmann66.csv', header = 0)
+CL_v_CD_M5p5 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M5p5_Saltzmann66.csv', header = 0)
+CL_v_CD_M6p0 = pd.read_csv('models/X15/aerodynamic_model/Saltzman66/data/CL_v_CD_M6p0_Saltzmann66.csv', header = 0)
 
 # Get data sequences from the pandas DataFrame
 CD_sample_M1p1 = CL_v_CD_M1p1['x'].values
@@ -752,7 +749,7 @@ if CD_vs_alpha_plot == 'on':
 
 # CYbeta table from comma separated variables exported from plot digitizer
 CYbeta_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/CYbeta_pdeg_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/CYbeta_pdeg_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -828,7 +825,7 @@ if CYbeta_pdeg_vs_Mach_plot == 'on':
 
 # CYbeta table from comma separated variables exported from plot digitizer
 Cnbeta_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cnbeta_pdeg_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cnbeta_pdeg_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -902,7 +899,7 @@ if Cnbeta_pdeg_vs_Mach_plot == 'on':
 
 # CYdelr table from comma separated variables exported from plot digitizer
 CYdelr_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/CYdelr_pdeg_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/CYdelr_pdeg_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -978,7 +975,7 @@ if CYdelr_pdeg_vs_Mach_plot == 'on':
 
 # CYp table from comma separated variables exported from plot digitizer
 CYp_prps_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/CYp_prps_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/CYp_prps_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1056,7 +1053,7 @@ if CYp_prps_vs_Mach_plot == 'on':
 
 # CYr table from comma separated variables exported from plot digitizer
 CYr_prps_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/CYr_prps_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/CYr_prps_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1130,7 +1127,7 @@ if CYr_prps_vs_Mach_plot == 'on':
 
 # CYdela table from comma separated variables exported from plot digitizer
 CYdela_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/CYdela_pdeg_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/CYdela_pdeg_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1209,7 +1206,7 @@ if CYdela_pdeg_vs_Mach_plot == 'on':
 
 # Clp Table from comma separated variables exported from plot digitizer
 Clp_for_AoA_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Clp_v_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Clp_v_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1281,7 +1278,7 @@ if Clp_vs_Mach_alpha_plot == 'on':
 
 # Clr Table from comma separated variables exported from plot digitizer
 Clr_for_AoA_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Clr_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Clr_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1351,7 +1348,7 @@ if Clr_vs_Mach_alpha_plot == 'on':
 
 # Cldela table from comma separated variables exported from plot digitizer
 Cldela_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cldela_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cldela_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1425,7 +1422,7 @@ if Cldela_pdeg_vs_Mach_plot == 'on':
 
 # Cldelr table from comma separated variables exported from plot digitizer
 Cldelr_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cldelr_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cldelr_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1498,7 +1495,7 @@ if Cldelr_pdeg_vs_Mach_plot == 'on':
 #-------------------------------------------------------------------------------
 
 # Cm Table from comma separated variables exported from plot digitizer
-Cm_for_AoA_Mach = pd.read_csv('vehicle_models/X15/aerodynamic_model/Walker60/data/Cm_vs_alpha_Walker60.csv', header = 0)
+Cm_for_AoA_Mach = pd.read_csv('models/X15/aerodynamic_model/Walker60/data/Cm_vs_alpha_Walker60.csv', header = 0)
 
 # Get data sequences from the pandas DataFrame
 alpha_sample_deg   = Cm_for_AoA_Mach['x'].values
@@ -1579,7 +1576,7 @@ if Cm_vs_alpha_plot == 'on':
 
 # Cnp Table from comma separated variables exported from plot digitizer
 Cnp_for_AoA_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cnp_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cnp_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1650,7 +1647,7 @@ if Cnp_vs_Mach_alpha_plot == 'on':
 
 # Cnr Table from comma separated variables exported from plot digitizer
 Cnr_for_AoA_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cnr_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cnr_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1720,7 +1717,7 @@ if Cnr_vs_Mach_alpha_plot == 'on':
 
 # Cndela table from comma separated variables exported from plot digitizer
 Cndela_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cndela_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cndela_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1794,7 +1791,7 @@ if Cndela_pdeg_vs_Mach_plot == 'on':
 
 # Cndelr table from comma separated variables exported from plot digitizer
 Cndelr_pdeg_vs_Mach = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Walker60/data/Cndelr_vs_Mach_Walker60.csv', 
+    'models/X15/aerodynamic_model/Walker60/data/Cndelr_vs_Mach_Walker60.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1876,7 +1873,7 @@ nWeight_bps = len(Weight_bps_lb)
 
 # Jxx and Jxz from comma separated variables exported from plot digitizer
 Jxx_and_Jxz_vs_Weight = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Yancey64/data/Jxx_and_Jxz_vs_Weight_Yancey64.csv', 
+    'models/X15/aerodynamic_model/Yancey64/data/Jxx_and_Jxz_vs_Weight_Yancey64.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1918,7 +1915,7 @@ Jxz_kgm2_v_Mass_kg = Jxz_slugft2_v_Weight_lb * slugft2_to_kgm2
 
 # Jxx and Jxz from comma separated variables exported from plot digitizer
 Jyy_vs_Weight = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Yancey64/data/Jyy_vs_Weight_Yancey64.csv', 
+    'models/X15/aerodynamic_model/Yancey64/data/Jyy_vs_Weight_Yancey64.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -1954,7 +1951,7 @@ Jyy_kgm2_v_Mass_kg = Jyy_slugft2_v_Weight_lb * slugft2_to_kgm2
 
 # Jxx and Jxz from comma separated variables exported from plot digitizer
 Jzz_vs_Weight = pd.read_csv(
-    'vehicle_models/X15/aerodynamic_model/Yancey64/data/Jzz_vs_Weight_Yancey64.csv', 
+    'models/X15/aerodynamic_model/Yancey64/data/Jzz_vs_Weight_Yancey64.csv', 
     header = 0)
 
 # Get data sequences from the pandas DataFrame
@@ -2012,13 +2009,13 @@ X15_aerodynamic_database = {
     'Cndelr_table_pdeg_v_alpha_deg_Mach' : Cndelr_table_pdeg_v_alpha_deg_Mach,
     
     'mass_bps_kg'                        : Mass_bps_kg,
-    'Jxx_mass_kg'                        : Jxx_kgm2_v_Mass_kg,
-    'Jxz_mass_kg'                        : Jxz_kgm2_v_Mass_kg,
-    'Jyy_mass_kg'                        : Jyy_kgm2_v_Mass_kg,
-    'Jzz_mass_kg'                        : Jzz_kgm2_v_Mass_kg,
+    'Jxx_kgm2_v_mass_kg'                 : Jxx_kgm2_v_Mass_kg,
+    'Jxz_kgm2_v_mass_kg'                 : Jxz_kgm2_v_Mass_kg,
+    'Jyy_kgm2_v_mass_kg'                 : Jyy_kgm2_v_Mass_kg,
+    'Jzz_kgm2_v_mass_kg'                 : Jzz_kgm2_v_Mass_kg,
 }
 
 if save_database == 'on':
-    np.savez('vehicle_models/X15/aerodynamic_model/X15_aerodynamic_database', **X15_aerodynamic_database)
+    np.savez('models/X15/aerodynamic_model/X15_aerodynamic_database', **X15_aerodynamic_database)
     
 print('X15 aerodynamic database build from report data completed.')

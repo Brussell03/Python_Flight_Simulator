@@ -9,5 +9,3 @@ def Cl_X15(ClBeta_prad, ClP_prps, ClR_prps, ClBetadot_pdps, Cldela_pdeg, Cldelr_
      ClBetadot_pdps*Betadot_dps*b_m/(2*true_airspeed_mps) + Cldela_pdeg*dela_deg + Cldelr_pdeg*delr_deg
 
      return Cl
-
-

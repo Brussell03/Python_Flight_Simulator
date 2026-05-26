@@ -13,5 +13,3 @@ def Cm_X15(Cmwb, Cmalpha_pdeg, Cmq_prps, Cmalphadot_prps, Cmdele_pdeg, Cmdelsb_p
         Cmdelsb_pdeg*delsb_deg
 
     return Cm
-
-
