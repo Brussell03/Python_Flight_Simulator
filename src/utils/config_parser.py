@@ -4,7 +4,7 @@ import yaml
 import ussa1976
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
-from src.utils.constants import D2R
+from src.utils.constants import D2R, FT2M
 
 def load_simulation_config(yaml_path):
     """
@@ -19,9 +19,14 @@ def load_simulation_config(yaml_path):
     else:
         raise ValueError(f"Unknown vehicle model: {config['vehicle']['model']}")
     
-    ic = config['initial_conditions']
+    meta_cfg = config.get('meta', {})
+    instruction_cfg = config.get('instructions', {})
+    output_cfg = config.get('output', {})
+    init_cond_cfg = config.get('initial_conditions', {})
+    trim_cfg = config.get('trim', {})
+    control_cfg = config.get('control', {})
     
-    h0_m  = ic['h_m']
+    h0_m  = init_cond_cfg['h_m'] if init_cond_cfg.get('h_m') is not None else init_cond_cfg['h_ft'] * FT2M
 
     # Build Atmosphere Model (amod)
     atmosphere = ussa1976.compute()
@@ -30,37 +35,42 @@ def load_simulation_config(yaml_path):
     c_mps = atmosphere["cs"].values
     c0_mps = fastInterp1(alt_m, c_mps, h0_m)
     
+    alpha_rad  = init_cond_cfg.get('alpha_deg') * D2R if init_cond_cfg.get('alpha_deg') is not None else init_cond_cfg.get('alpha_rad', 0.0)
+    beta_rad   = init_cond_cfg.get('beta_deg') * D2R if init_cond_cfg.get('beta_deg') is not None else init_cond_cfg.get('beta_rad', 0.0)
+    
     # Trig operations on initial angle of attack and sideslip
-    s_alpha   =    math.sin(ic['alpha_deg']*D2R)
-    c_alpha   =    math.cos(ic['alpha_deg']*D2R)
-    s_beta    =    math.sin(ic['beta_deg']*D2R)
-    c_beta    =    math.cos(ic['beta_deg']*D2R)
+    s_alpha    =    math.sin(init_cond_cfg.get('alpha_deg', 0)*D2R)
+    c_alpha    =    math.cos(init_cond_cfg.get('alpha_deg', 0)*D2R)
+    s_beta     =    math.sin(init_cond_cfg.get('beta_deg', 0)*D2R)
+    c_beta     =    math.cos(init_cond_cfg.get('beta_deg', 0)*D2R)
     
-    u0_bf_mps  =   c_alpha*c_beta*ic['Mach']*c0_mps
-    v0_bf_mps  =   s_beta*ic['Mach']*c0_mps
-    w0_bf_mps  =   s_alpha*c_beta*ic['Mach']*c0_mps
+    u0_bf_mps  =   c_alpha*c_beta*init_cond_cfg['Mach']*c0_mps
+    v0_bf_mps  =   s_beta*init_cond_cfg['Mach']*c0_mps
+    w0_bf_mps  =   s_alpha*c_beta*init_cond_cfg['Mach']*c0_mps
     
-    p0_bf_rps  =   ic['p_rps']
-    q0_bf_rps  =   ic['q_rps']
-    r0_bf_rps  =   ic['r_rps']
+    # Angular rates: priority to dps, then rps, then default to 0.0
+    p0_bf_rps  = init_cond_cfg.get('p_dps') * D2R if init_cond_cfg.get('p_dps') is not None else init_cond_cfg.get('p_rps', 0.0)
+    q0_bf_rps  = init_cond_cfg.get('q_dps') * D2R if init_cond_cfg.get('q_dps') is not None else init_cond_cfg.get('q_rps', 0.0)
+    r0_bf_rps  = init_cond_cfg.get('r_dps') * D2R if init_cond_cfg.get('r_dps') is not None else init_cond_cfg.get('r_rps', 0.0)
     
-    phi0_rad   =   ic['phi_deg'] * D2R
-    theta0_rad =   ic['theta_deg'] * D2R
-    psi0_rad   =   ic['psi_deg'] * D2R
+    # Attitude angles: priority to deg, then rad, then default to 0.0
+    phi0_rad   = init_cond_cfg.get('phi_deg') * D2R if init_cond_cfg.get('phi_deg') is not None else init_cond_cfg.get('phi_rad', 0.0)
+    theta0_rad = init_cond_cfg.get('theta_deg') * D2R if init_cond_cfg.get('theta_deg') is not None else init_cond_cfg.get('theta_rad', 0.0)
+    psi0_rad   = init_cond_cfg.get('psi_deg') * D2R if init_cond_cfg.get('psi_deg') is not None else init_cond_cfg.get('psi_rad', 0.0)
     
     q0_0       =   math.cos(psi0_rad/2)*math.cos(theta0_rad/2)*math.cos(phi0_rad/2) + math.sin(psi0_rad/2)*math.sin(theta0_rad/2)*math.sin(phi0_rad/2)
     q1_0       =   math.cos(psi0_rad/2)*math.cos(theta0_rad/2)*math.sin(phi0_rad/2) - math.sin(psi0_rad/2)*math.sin(theta0_rad/2)*math.cos(phi0_rad/2)
     q2_0       =   math.cos(psi0_rad/2)*math.sin(theta0_rad/2)*math.cos(phi0_rad/2) + math.sin(psi0_rad/2)*math.cos(theta0_rad/2)*math.sin(phi0_rad/2)
     q3_0       =   math.sin(psi0_rad/2)*math.cos(theta0_rad/2)*math.cos(phi0_rad/2) - math.cos(psi0_rad/2)*math.sin(theta0_rad/2)*math.sin(phi0_rad/2)
     
-    lat0_rad   =   ic['lat_deg'] * D2R
-    long0_rad  =   ic['long_deg'] * D2R
+    lat0_rad   =   init_cond_cfg.get('lat_deg') * D2R if init_cond_cfg.get('lat_deg') is not None else init_cond_cfg.get('lat_rad', 0.0)
+    long0_rad  =   init_cond_cfg.get('long_deg') * D2R if init_cond_cfg.get('long_deg') is not None else init_cond_cfg.get('long_rad', 0.0)
     
-    dela_ach_deg = ic['dela_ach_deg'] * D2R
-    dele_ach_deg = ic['dele_ach_deg'] * D2R
-    delr_ach_deg = ic['delr_ach_deg'] * D2R
+    dela_ach_deg = init_cond_cfg.get('dela_ach_deg', 0)
+    dele_ach_deg = init_cond_cfg.get('dele_ach_deg', 0)
+    delr_ach_deg = init_cond_cfg.get('delr_ach_deg', 0)
     
-    m_fuel_kg = ic['m_fuel_kg']
+    m_fuel_kg = init_cond_cfg['m_fuel_kg']
     
     amod = {
         "alt_m": alt_m,
@@ -76,22 +86,5 @@ def load_simulation_config(yaml_path):
         lat0_rad, long0_rad, h0_m,
         dela_ach_deg, dele_ach_deg, delr_ach_deg, m_fuel_kg
     ]
-    
-    # Note: Velocities are typically derived dynamically from Mach/Alpha/Beta in the trim solver, 
-    # but we pass the raw ICs to the solver to handle.
-    x_guess = [
-        ic['Mach'], ic['alpha_deg'] * D2R, ic['beta_deg'] * D2R,
-        0.0, 0.0, 0.0, # Rates
-        ic['phi_deg'] * D2R, ic['theta_deg'] * D2R, ic['psi_deg'] * D2R,
-        ic['lat_deg'] * D2R, ic['long_deg'] * D2R, ic['h_m'],
-        ic['dela_ach_deg'] * D2R, ic['dele_ach_deg'] * D2R, ic['delr_ach_deg'] * D2R, 
-        ic['m_fuel_kg']
-    ]
-    
-    u_guess = [0.0, 0.0, 0.0, config['control']['throttle_percent']]
-    
-    analysis = config['analysis']
-    analysis['trim_flag'] = analysis.get('trim_flag', 'off') # Defaults to 'off' if missing
-    analysis['linearization_flag'] = analysis.get('linearization_flag', 'off')
 
-    return vehicle, amod, config['control'], config['simulation'], ic, x0, x_guess, u_guess, analysis, config
+    return vehicle, amod, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0

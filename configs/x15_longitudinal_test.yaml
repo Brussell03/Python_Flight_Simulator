@@ -5,6 +5,25 @@ meta:
 vehicle:
     model: "X15"
 
+instructions:
+    simulate: true
+    perform_trim: false
+    perform_linearization: false
+    t0_s: 0.0
+    tf_s: 7.0
+    dt_s: 0.012
+
+output:
+    save_data: true
+    save_dir: "./output_data/"
+    figures:
+        6dof: true
+        attitude: true
+        controls: true
+        aerodynamics: true
+        geodetic: true
+        ned_velocity: true
+
 initial_conditions:
     Mach: 3.25
     alpha_deg: -2.0
@@ -22,12 +41,6 @@ initial_conditions:
     lat_deg: 32.335556
     long_deg: -106.405833
     m_fuel_kg: 0.0
-    psidot_target_dps: 0.0
-
-simulation:
-    t0_s: 0.0
-    tf_s: 7.0
-    dt_s: 0.012
 
 control:
     type: "time_history"
@@ -46,18 +59,3 @@ control:
     dela_cmd_deg: 0.0
     dele_cmd_deg: 0.0
     delr_cmd_deg: 0.0
-
-analysis:
-    perform_trim: false
-    perform_linearization: false
-
-output:
-    save_data: true
-    save_dir: "./output_data/"
-    figures:
-        6dof: true
-        attitude: true
-        controls: true
-        aerodynamics: true
-        geodetic: true
-        ned_velocity: true

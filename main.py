@@ -14,25 +14,25 @@ from src.utils.constants import D2R, R2D, A_WGS84_M, E_WGS84, OMEGA_E_RPS
 
 def run_job(config_path):
     # 1. Initialization
-    vehicle, amod, cmod, sim_params, ic, x0, x_guess, u_guess, analysis, config = load_simulation_config(config_path)
+    vehicle, amod, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0 = load_simulation_config(config_path)
     
-    t0_s, tf_s, dt_s = sim_params['t0_s'], sim_params['tf_s'], sim_params['dt_s']
+    t0_s, tf_s, dt_s = instruction_cfg['t0_s'], instruction_cfg['tf_s'], instruction_cfg['dt_s']
     state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
     
     # 2. Trim & Analysis Dispatch
-    if analysis.get('perform_trim', False):
+    if instruction_cfg.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
-        x_trim, u_trim, msg = trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, ic['psidot_target_dps'] * D2R)
+        x_trim, u_trim, msg = trim_solver(vehicle, amod, control_cfg, trim_cfg, x0)
         
         if x_trim is not None:
             x0 = x_trim # Override initial conditions with trim state
             
-            if analysis.get('perform_linearization', False):
+            if instruction_cfg.get('perform_linearization', False):
                 print("\n--- Executing Linearization ---")
                 
                 state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
                 
-                A, B, core_state_names, core_control_names = compute_state_space(x_trim, u_trim, vehicle, amod, cmod, state_names)
+                A, B, core_state_names, core_control_names = compute_state_space(x_trim, u_trim, vehicle, amod, control_cfg, state_names)
                 
                 analyze_mode_shapes(A, core_state_names)
                 plot_linear_response(A, B, t_end=30.0) # Set to 30s to watch the unstable modes diverge
@@ -46,10 +46,10 @@ def run_job(config_path):
     x[:, 0] = x0
     aux_data_accum = np.zeros((16, nt_s))
 
-    t_s, x, aux_data_accum = RK4(eom_wgs84, t_s, x, dt_s, vehicle, amod, cmod, aux_data_accum)
+    t_s, x, aux_data_accum = RK4(eom_wgs84, t_s, x, dt_s, vehicle, amod, control_cfg, aux_data_accum)
 
     # 4. Vectorized Post-Processing
-    print("--- Post-Processing Data ---")
+    print("\n--- Post-Processing Data ---")
     # Pointers so we plot the right data
     sel_state_u_b_mps   = 0
     sel_state_v_b_mps   = 1
@@ -270,9 +270,8 @@ def run_job(config_path):
                                 delt_percent), axis=1 )
 
     # 5. Output Management
-    output_cfg = config.get('output', {})
     if output_cfg:
-        job_name = config['meta']['job_name']
+        job_name = meta_cfg['job_name']
         base_out_dir = output_cfg.get('save_dir', './output_data/')
         
         # Define Job-Specific Directories
@@ -302,6 +301,8 @@ def run_job(config_path):
             if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics()
             if plot_cfg.get('geodetic', False):     plotter.plot_geodetic()
             if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity()
+            
+    print("\n")
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py configs/x15_descending_turn.yaml

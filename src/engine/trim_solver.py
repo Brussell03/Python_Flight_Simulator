@@ -7,31 +7,10 @@ from src.dynamics.eom_wgs84 import eom_wgs84
 from src.utils.constants import D2R, R2D, A_WGS84_M, G0_MPS2
 from src.utils.interpolators import fastInterp1
 
-def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_rps):
+def trim_solver(vehicle, amod, cmod, tmod, x):
     """
     Finds the trimmed flight state by minimizing angular accelerations subject to kinematic constraints.
     """
-    
-    # 1. Extract targets and initial guesses from the passed configuration vectors
-    h_target_m = x_guess[11]
-    c_snd = fastInterp1(amod['alt_m'], amod['c_mps'], h_target_m)
-    V_T_target_mps = x_guess[0] * c_snd
-    
-    alpha_guess_rad = x_guess[1]
-    beta_target_rad = x_guess[2]
-    p_target_rps = x_guess[3]
-    q_target_rps = x_guess[4]
-    r_target_rps = x_guess[5]
-    
-    phi_target_rad = x_guess[6]
-    theta_target_rad = x_guess[7]
-    psi_target_rad = x_guess[8]
-    
-    lat_target_rad = x_guess[9]
-    long_target_rad = x_guess[10]
-    m_fuel0_kg = x_guess[15]
-    
-    gamma_target_rad = theta_target_rad - alpha_guess_rad
 
     # 2. Define Internal Optimizer Functions
     def cost_function(x_trim, vehicle, amod, cmod):
@@ -60,14 +39,14 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
         # Call the EOM
         dx, auxillary_data = eom_wgs84(0, x_full, dx, auxillary_data, vehicle, amod, cmod)
         
-        if analysis["trim_mode"] == 'steady_glide':
+        if tmod["trim_mode"] == 'steady_glide':
             cost = dx[0]**2 + dx[1]**2 + dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2
-        elif analysis["trim_mode"] == 'moment_equilibrium':
+        elif tmod["trim_mode"] == 'moment_equilibrium':
             cost = dx[3]**2 + dx[4]**2 + dx[5]**2
-        elif analysis["trim_mode"] == 'descending_turn':
+        elif tmod["trim_mode"] == 'descending_turn':
             p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[13], auxillary_data[14], auxillary_data[15]
             psidot_current = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
-            cost = 0*dx[0]**2 + dx[1]**2 + 0*dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2 + 1e1*(psidot_current-target_psidot_rps)**2
+            cost = 0*dx[0]**2 + dx[1]**2 + 0*dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2 + 1e1*(psidot_current-psidot_target_rps)**2
         else:
             cost = dx[3]**2 + dx[4]**2 + dx[5]**2 # Fallback
             
@@ -92,7 +71,7 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
         def altitude_constraint(x_trim): return x_trim[11] - h_target_m
         def latitude_constraint(x_trim): return x_trim[9] - lat_target_rad
         def longitude_constraint(x_trim): return x_trim[10] - long_target_rad
-        def fuel_constraint(x_trim): return x_trim[15] - m_fuel0_kg
+        def fuel_constraint(x_trim): return x_trim[15] - m_fuel_target_kg
         
         def flight_path_angle_constraint(x_trim):
             gamma_current_rad = x_trim[7] - math.atan2(x_trim[2], x_trim[0])
@@ -110,7 +89,7 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
             g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
             g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
             
-            G = (target_psidot_rps * V_T_target_mps) / g_local
+            G = (psidot_target_rps * V_T_target_mps) / g_local
             a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
             b = math.sin(gamma_current_rad)/math.cos(beta_current_rad)
             c = 1 + G**2*math.cos(beta_current_rad)**2
@@ -144,7 +123,7 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
             g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
             g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
             
-            G = (target_psidot_rps * V_T_target_mps) / g_local
+            G = (psidot_target_rps * V_T_target_mps) / g_local
             a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
             b = math.sin(gamma_current_rad)/math.cos(beta_current_rad)
             c = 1 + G**2*math.cos(beta_current_rad)**2
@@ -154,7 +133,7 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
             phi_target_rad = math.atan(tan_phi_target_rad)
             return x_trim[6] - phi_target_rad
 
-        if analysis["trim_mode"] == 'steady_glide':
+        if tmod["trim_mode"] == 'steady_glide':
             return [
                 {'type': 'eq', 'fun': velocity_constraint},
                 {'type': 'eq', 'fun': beta_constraint},
@@ -168,7 +147,7 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
                 {'type': 'eq', 'fun': yaw_constraint},
                 {'type': 'eq', 'fun': fuel_constraint}
             ]
-        elif analysis["trim_mode"] == 'moment_equilibrium':
+        elif tmod["trim_mode"] == 'moment_equilibrium':
             return [
                 {'type': 'eq', 'fun': velocity_constraint},
                 {'type': 'eq', 'fun': beta_constraint},
@@ -183,7 +162,7 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
                 {'type': 'eq', 'fun': yaw_constraint},
                 {'type': 'eq', 'fun': fuel_constraint}
             ]
-        elif analysis["trim_mode"] == 'descending_turn':
+        elif tmod["trim_mode"] == 'descending_turn':
             return [
                 {'type': 'eq', 'fun': velocity_constraint},
                 {'type': 'eq', 'fun': altitude_constraint},
@@ -198,30 +177,79 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
     
     # 3. Setup and Execution
     print("--- Unpowered Trim Solver ---")
-    analysis["trim_flag"] = 'on'
+    
+    tmod['trim_flag'] = tmod.get('trim_flag', 'off') # Defaults to 'off' if missing
+    tmod['linearization_flag'] = tmod.get('linearization_flag', 'off')
+    
+    # 1. Extract initial guesses from the passed configuration vectors
+    V_T_curr_mps = math.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
+        
+    if x[0] == 0:
+        w_over_u = 0
+    else:
+        w_over_u = x[2]/x[0]
+    alpha_curr_rad = math.atan(w_over_u)
+    
+    if V_T_curr_mps == 0:
+        v_over_VT = 0
+    else:
+        v_over_VT = x[1]/V_T_curr_mps
+    beta_curr_rad = math.asin(v_over_VT)
+    
+    Cs_mps = fastInterp1(amod["alt_m"], amod["c_mps"], x[12])
+    Mach_curr = V_T_curr_mps/Cs_mps
+    
+    h_target_m = tmod.get('h_m', x[12])
+    c_snd = fastInterp1(amod['alt_m'], amod['c_mps'], h_target_m)
+    V_T_target_mps = tmod.get('Mach', Mach_curr) * c_snd
+    
+    alpha_target_rad = tmod['alpha_deg'] * D2R if tmod.get('alpha_deg') is not None else alpha_curr_rad
+    beta_target_rad = tmod['beta_deg'] * D2R if tmod.get('beta_deg') is not None else beta_curr_rad
+    
+    q0, q1, q2, q3 = x[6], x[7], x[8], x[9]
+    phi_curr_rad   = math.atan2(2*(q0*q1 + q2*q3), 1 - 2*(q1**2 + q2**2))
+    theta_curr_rad = math.asin(np.clip(2*(q0*q2 - q3*q1), -1.0, 1.0))
+    psi_curr_rad   = math.atan2(2*(q0*q3 + q1*q2), 1 - 2*(q2**2 + q3**2))
 
-    s_alpha = math.sin(alpha_guess_rad)
-    c_alpha = math.cos(alpha_guess_rad)
+    s_alpha = math.sin(alpha_target_rad)
+    c_alpha = math.cos(alpha_target_rad)
     s_beta = math.sin(beta_target_rad)
     c_beta = math.cos(beta_target_rad)
+    
+    u_target_b_mps   = c_alpha * c_beta * V_T_target_mps
+    v_target_b_mps   = s_beta * V_T_target_mps
+    b_target_b_mps   = s_alpha * c_beta * V_T_target_mps
+    p_target_rps     = tmod['p_rps'] if tmod.get('p_rps') is not None else x[3]
+    q_target_rps     = tmod['q_rps'] if tmod.get('q_rps') is not None else x[4]
+    r_target_rps     = tmod['r_rps'] if tmod.get('r_rps') is not None else x[5]
+    phi_target_rad   = tmod['phi_deg'] * D2R if tmod.get('phi_deg') is not None else phi_curr_rad
+    theta_target_rad = tmod['theta_deg'] * D2R if tmod.get('theta_deg') is not None else theta_curr_rad
+    psi_target_rad   = tmod['psi_deg'] * D2R if tmod.get('psi_deg') is not None else psi_curr_rad
+    lat_target_rad   = tmod['lat_deg'] * D2R if tmod.get('lat_deg') is not None else x[10]
+    long_target_rad  = tmod['long_deg'] * D2R if tmod.get('long_deg') is not None else x[11]
+    m_fuel_target_kg = tmod.get('m_fuel_kg', x[16])
+    
+    psidot_target_rps = tmod.get('psidot_dps') * D2R
+    gamma_target_rad = theta_target_rad - alpha_target_rad
 
-    x0 = np.zeros(16)
-    x0[0]  = c_alpha * c_beta * V_T_target_mps
-    x0[1]  = s_beta * V_T_target_mps
-    x0[2]  = s_alpha * c_beta * V_T_target_mps
-    x0[3]  = p_target_rps 
-    x0[4]  = q_target_rps
-    x0[5]  = r_target_rps
-    x0[6]  = phi_target_rad
-    x0[7]  = theta_target_rad
-    x0[8]  = psi_target_rad
-    x0[9]  = lat_target_rad
-    x0[10] = long_target_rad
-    x0[11] = h_target_m
-    x0[12] = x_guess[12] # dela_ach_guess
-    x0[13] = x_guess[13] # dele_ach_guess
-    x0[14] = x_guess[14] # delr_ach_guess
-    x0[15] = m_fuel0_kg
+    # Use current state vector overrided by provided guess parameters
+    x_guess = np.zeros(16)
+    x_guess[0]  = u_target_b_mps
+    x_guess[1]  = v_target_b_mps
+    x_guess[2]  = b_target_b_mps
+    x_guess[3]  = p_target_rps
+    x_guess[4]  = q_target_rps
+    x_guess[5]  = r_target_rps
+    x_guess[6]  = phi_target_rad
+    x_guess[7]  = theta_target_rad
+    x_guess[8]  = psi_target_rad
+    x_guess[9]  = lat_target_rad
+    x_guess[10] = long_target_rad
+    x_guess[11] = h_target_m
+    x_guess[12] = tmod.get('dela_ach_deg', x[13])
+    x_guess[13] = tmod.get('dele_ach_deg', x[14])
+    x_guess[14] = tmod.get('delr_ach_deg', x[15])
+    x_guess[15] = m_fuel_target_kg
     
     warnings.filterwarnings("ignore", category=RuntimeWarning, message="Values in x were outside bounds during a minimize step")
 
@@ -234,12 +262,14 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
     bounds[13] = (-math.pi/4*R2D, math.pi/4*R2D)
     bounds[14] = (-math.pi/4*R2D, math.pi/4*R2D)
     bounds[15] = (0, vehicle.m_wet_kg - vehicle.m_dry_kg) # Dynamically accessed from vehicle object
+    
+    tmod["trim_flag"] = 'on'
 
     print("Solving for trim state...")
     result = minimize(
         fun = cost_function,
-        x0 = x0,
-        args = (vehicle, amod, cmod),  
+        x0 = x_guess,
+        args = (vehicle, amod, cmod),
         method = 'SLSQP',
         bounds = bounds,
         constraints = define_trim_constraints(),
@@ -317,7 +347,7 @@ def trim_solver(vehicle, amod, cmod, analysis, x_guess, u_guess, target_psidot_r
             x_trim_full[13], # dela_cmd
             x_trim_full[14], # dele_cmd
             x_trim_full[15], # delr_cmd
-            u_guess[3]       # throttle pct
+            cmod['throttle_percent'] # throttle pct
         ])
         
         return x_trim_full, u_trim, result.message
