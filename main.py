@@ -2,7 +2,9 @@ import sys
 import os
 import math
 import numpy as np
+import matplotlib.pyplot as plt
 
+from src.engine.compare_data import compare_data_to_file
 from src.utils.config_parser import load_simulation_config
 from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
@@ -207,16 +209,17 @@ def run_job(config_path):
     delr_cmd_deg   = delr_cmd_deg[:, np.newaxis]
     delt_percent   = aux_data_accum[sel_auxillary_data_delt_percent,:]
     delt_percent   = delt_percent[:, np.newaxis]
-
-    # Combine state date with time and other post processed data
-    t_s = t_s[:, np.newaxis]
-    sim_data = np.concatenate( (t_s, x.T, Cs_mps, Rho_kgpm3, Mach, Alpha_rad, \
-                                Beta_rad, True_Airspeed_mps, phi_rad, theta_rad, psi_rad, \
-                                u_n_mps, v_n_mps, w_n_mps, dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, \
-                                delt_percent), axis=1 )
+    
 
     # 5. Output Management
     if output_cfg:
+        # Combine state date with time and other post processed data
+        t_s = t_s[:, np.newaxis]
+        sim_data = np.concatenate( (t_s, x.T, Cs_mps, Rho_kgpm3, Mach, Alpha_rad, \
+                                    Beta_rad, True_Airspeed_mps, phi_rad, theta_rad, psi_rad, \
+                                    u_n_mps, v_n_mps, w_n_mps, dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, \
+                                    delt_percent), axis=1 )
+        
         job_name = meta_cfg['job_name']
         base_out_dir = output_cfg.get('save_dir', './output_data/')
         
@@ -228,25 +231,34 @@ def run_job(config_path):
         # Save Numerical Data
         if output_cfg.get('save_data', False):
             os.makedirs(data_dir, exist_ok=True)
-            save_path = os.path.join(data_dir, f"{job_name}.npy")
-            np.save(save_path, sim_data)
+            save_path = os.path.join(data_dir, f"{job_name}.npz")
+            meta = {'job_name': job_name}
+            np.savez(save_path, data=sim_data, meta=meta)
             print(f"\n--- Saving Output ---")
             print(f"Data saved to: {save_path}")
 
         # Dispatch Plots Based on Config Booleans
-        plot_cfg = output_cfg.get('figures', {})
+        plot_cfg = output_cfg.get('plots', {})
+        show_plots = output_cfg.get('show_plots', False)
+        
         if any(plot_cfg.values()): 
             # Only instantiate plotter and make dir if at least one plot is True
             os.makedirs(plot_dir, exist_ok=True)
-            plotter = SimulatorPlotter(sim_data, plot_dir=plot_dir)
+            plotter = SimulatorPlotter({'name': job_name, 'data': sim_data}, plot_dir=plot_dir)
             
-            if plot_cfg.get('6dof', False):         plotter.plot_6dof()
-            if plot_cfg.get('attitude', False):     plotter.plot_attitude()
-            if plot_cfg.get('controls', False):     plotter.plot_controls()
-            if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics()
-            if plot_cfg.get('geodetic', False):     plotter.plot_geodetic()
-            if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity()
+            if plot_cfg.get('6dof', False):         plotter.plot_6dof(show=show_plots)
+            if plot_cfg.get('attitude', False):     plotter.plot_attitude(show=show_plots)
+            if plot_cfg.get('controls', False):     plotter.plot_controls(show=show_plots)
+            if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics(show=show_plots)
+            if plot_cfg.get('geodetic', False):     plotter.plot_geodetic(show=show_plots)
+            if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity(show=show_plots)
             print(f"Plots saved to: {plot_dir}")
+            
+            if show_plots:
+                print("Displaying plots. Close all plot windows to terminate script.")
+                plt.show(block=True)
+        
+        if output_cfg.get('compare') is not None: compare_data_to_file(output_cfg.get('compare'), output_cfg.get('save_compare', False))
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py configs/x15_descending_turn.yaml

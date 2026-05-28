@@ -16,13 +16,16 @@ instructions:
 output:
     save_data: true
     save_dir: "./output_data/"
-    figures:
+    show_plots: false
+    plots:
         6dof: true
         attitude: true
         controls: true
         aerodynamics: true
         geodetic: true
         ned_velocity: true
+    compare: "./output_data/X15_Stabilizer_Pulse_FT/data/X15_Stabilizer_Pulse_FT.npz"
+    save_compare: false
 
 initial_conditions:
     Mach: 2.4
@@ -49,9 +52,9 @@ trim:
 control:
     type: "doublet"
     amplitude: 1.5
-    t1_s: 1.0
-    t2_s: 10.0
-    t3_s: 20.0
+    t1_s: 0.0
+    t2_s: 1.0
+    t3_s: 2.0
     aileron: false
     elevator: false
     rudder: false

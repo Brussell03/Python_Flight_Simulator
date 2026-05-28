@@ -246,6 +246,11 @@ class X15(Vehicle):
             
         return delr_sas_deg + delr_pedal_deg
 
+    def get_trim_values(self, trim_list):
+        if trim_list is None:
+            return 0, 0, 0
+        return trim_list[:3]
+
     def get_sas_commands(self, t, x, cmod, u_trim):
         """
         Routes the Stability Augmentation System and superimposes commands over trim baseline.
@@ -254,9 +259,7 @@ class X15(Vehicle):
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
         # Extract trim baselines
-        dela_trim_deg = u_trim[0]
-        dele_trim_deg = u_trim[1]
-        delr_trim_deg = u_trim[2]
+        dela_trim_deg, dele_trim_deg, delr_trim_deg = self.get_trim_values(u_trim)
         
         # Calculate dynamic commands (Stick + Feedback)
         dela_dynamic_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)

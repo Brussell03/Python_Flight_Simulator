@@ -16,7 +16,8 @@ instructions:
 output:
     save_data: true
     save_dir: "./output_data/"
-    figures:
+    show_plots: false
+    plots:
         6dof: true
         attitude: true
         controls: true

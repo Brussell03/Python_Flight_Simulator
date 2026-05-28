@@ -8,42 +8,37 @@ class SimulatorPlotter:
     Handles all visual output for the flight simulation.
     Maps data arrays to plots using specified indices.
     """
-    def __init__(self, data, plot_dir):
-        self.data = data
+    def __init__(self, dataset_list, plot_dir):
+        """
+        dataset_list: List of dictionaries [{'name': str, 'data': np.array}]
+        """
         self.plot_dir = plot_dir
         
-        # Map parameters by columns defined in sim_data
-        self.t = self.data[:, 0]
+        # If the user passes a single dict, convert it to a list
+        if isinstance(dataset_list, dict):
+            dataset_list = [dataset_list]
         
-        # 6-DOF Body States
-        self.u, self.v, self.w = self.data[:, 1], self.data[:, 2], self.data[:, 3]
-        self.p, self.q, self.r = self.data[:, 4] * R2D, self.data[:, 5] * R2D, self.data[:, 6] * R2D
+        self.datasets = [self._process_dataset(d) for d in dataset_list]
+        self.colors = plt.cm.tab10(np.linspace(0, 1, len(self.datasets)))
         
-        # Geodetic Position & Altitude
-        self.lat = self.data[:, 11] * R2D
-        self.lon = self.data[:, 12] * R2D
-        self.alt = self.data[:, 13]
-        
-        # Controls
-        self.dela_ach = self.data[:, 14]
-        self.dele_ach = self.data[:, 15]
-        self.delr_ach = self.data[:, 16]
-        self.dela_cmd = self.data[:, 30]
-        self.dele_cmd = self.data[:, 31]
-        self.delr_cmd = self.data[:, 32]
-        self.throttle = self.data[:, 33]
-        
-        # Air Data
-        self.mach = self.data[:, 20]
-        self.alpha = self.data[:, 21] * R2D
-        self.beta = self.data[:, 22] * R2D
-        self.tas = self.data[:, 23]
-        
-        # Euler Angles
-        self.phi, self.theta, self.psi = self.data[:, 24] * R2D, self.data[:, 25] * R2D, self.data[:, 26] * R2D
-        
-        # NED Velocities
-        self.u_n, self.v_n, self.w_n = self.data[:, 27], self.data[:, 28], self.data[:, 29]
+        self.save = plot_dir is not None
+    
+    def _process_dataset(self, item):
+        """Maps columns to keys and stores the job name."""
+        data = item['data']
+        return {
+            'name': item['name'],
+            't': data[:, 0],
+            'u': data[:, 1], 'v': data[:, 2], 'w': data[:, 3],
+            'p': data[:, 4] * R2D, 'q': data[:, 5] * R2D, 'r': data[:, 6] * R2D,
+            'lat': data[:, 11] * R2D, 'lon': data[:, 12] * R2D, 'alt': data[:, 13],
+            'dela_ach': data[:, 14], 'dele_ach': data[:, 15], 'delr_ach': data[:, 16],
+            'mach': data[:, 20], 'alpha': data[:, 21] * R2D, 'beta': data[:, 22] * R2D, 'tas': data[:, 23],
+            'phi': data[:, 24] * R2D, 'theta': data[:, 25] * R2D, 'psi': data[:, 26] * R2D,
+            'u_n': data[:, 27], 'v_n': data[:, 28], 'w_n': data[:, 29],
+            'dela_cmd': data[:, 30], 'dele_cmd': data[:, 31], 'delr_cmd': data[:, 32],
+            'throttle': data[:, 33]
+        }
 
     def _setup_figure(self, title, rows, cols, figsize):
         """Internal helper for centralized figure formatting."""
@@ -61,106 +56,121 @@ class SimulatorPlotter:
         ax.grid(color='#333333', linestyle='--', linewidth=0.5)
         for spine in ax.spines.values():
             spine.set_color('#404040')
+    
+    def _plot_all_time(self, ax, key):
+        """Helper to loop through all loaded datasets."""
+        for i, ds in enumerate(self.datasets):
+            if key and ds[key] is not None:
+                ax.plot(ds['t'], ds[key], color=self.colors[i], linewidth=1.2, label=ds['name'])
+        if len(self.datasets) > 1:
+            ax.legend(loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
+    
+    def _plot_all(self, ax, keyX, keyY):
+        """Helper to loop through all loaded datasets."""
+        for i, ds in enumerate(self.datasets):
+            if keyX and keyY and ds[keyX] is not None and ds[keyY] is not None:
+                ax.plot(ds[keyX], ds[keyY], color=self.colors[i], linewidth=1.2, label=ds['name'])
+        if len(self.datasets) > 1:
+            ax.legend(loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
 
-    def plot_6dof(self, filename="6dof.png"):
+    def plot_6dof(self, filename="6dof.png", show=False):
         fig, axes = self._setup_figure("6-DOF State Vectors", 2, 3, (12, 8))
-        plot_data = [self.u, self.v, self.w, self.p, self.q, self.r]
+        keys = ['u', 'v', 'w', 'p', 'q', 'r']
         labels = ['u [m/s]', 'v [m/s]', 'w [m/s]', 'p [deg/s]', 'q [deg/s]', 'r [deg/s]']
         
         for i, ax in enumerate(axes.flatten()):
-            ax.plot(self.t, plot_data[i], color='#00E5FF', linewidth=1.2) 
+            self._plot_all_time(ax, keys[i])
             self._format_ax(ax, labels[i])
             
         plt.tight_layout()
-        plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
-        plt.close()
+        if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
+        if show: plt.show(block=False)
 
-    def plot_attitude(self, filename="attitude.png"):
+    def plot_attitude(self, filename="attitude.png", show=False):
         fig, axes = self._setup_figure("Euler Angles", 3, 1, (10, 8))
-        plot_data = [self.phi, self.theta, self.psi]
+        keys = ['phi', 'theta', 'psi']
         labels = ['Roll Angle [deg]', 'Pitch Angle [deg]', 'Yaw Angle [deg]']
         
         for i, ax in enumerate(axes.flatten()):
-            ax.plot(self.t, plot_data[i], color='#FF007F', linewidth=1.2) 
+            self._plot_all_time(ax, keys[i])
             self._format_ax(ax, labels[i])
             
         plt.tight_layout()
-        plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
-        plt.close()
+        if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
+        if show: plt.show(block=False)
 
-    def plot_controls(self, filename="controls.png"):
+    def plot_controls(self, filename="controls.png", show=False):
         fig, axes = self._setup_figure("Actuation & Controls", 2, 2, (10, 6))
         
-        # Pair achieved and command data
-        achieved_data = [self.dela_ach, self.dele_ach, self.delr_ach, self.throttle]
-        command_data = [self.dela_cmd, self.dele_cmd, self.delr_cmd, None] # Throttle has no command array mapped
-        
+        ach_keys = ['dela_ach', 'dele_ach', 'delr_ach', 'throttle']
+        cmd_keys = ['dela_cmd', 'dele_cmd', 'delr_cmd', None]
         labels = ['Aileron [deg]', 'Elevator [deg]', 'Rudder [deg]', 'Throttle [%]']
         
         for i, ax in enumerate(axes.flatten()):
-            # Plot Achieved
-            ax.plot(self.t, achieved_data[i], color='#39FF14', linewidth=1.5, label='Achieved')
+            ach_k = ach_keys[i]
+            cmd_k = cmd_keys[i]
             
-            # Plot Command
-            if command_data[i] is not None:
-                ax.plot(self.t, command_data[i], color='white', linewidth=1.2, linestyle='--', alpha=0.7, label='Command')
+            # Iterate through all loaded datasets
+            for ds_idx, ds in enumerate(self.datasets):
+                color = self.colors[ds_idx]
+                
+                # Plot Achieved (Solid, Dataset Color)
+                ax.plot(ds['t'], ds[ach_k], color=color, linewidth=1.5, label=f"{ds['name']} (Ach)")
+                
+                # Plot Command (Dashed, White)
+                if cmd_k and ds[cmd_k] is not None:
+                    ax.plot(ds['t'], ds[cmd_k], color='white', linewidth=1.2, linestyle='--', alpha=0.7, label=f"{ds['name']} (Cmd)")
             
             self._format_ax(ax, labels[i])
-            
-            # Add legend to distinguish lines (using dark background formatting)
-            if command_data[i] is not None:
-                ax.legend(loc='upper right', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
+            ax.legend(loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
             
         plt.tight_layout()
-        plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
-        plt.close()
+        if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
+        if show: plt.show(block=False)
         
-    def plot_aerodynamics(self, filename="air_data.png"):
+    def plot_aerodynamics(self, filename="air_data.png", show=False):
         fig, axes = self._setup_figure("Aerodynamic States", 2, 2, (10, 6))
+        keys = ['alpha', 'beta', 'mach', 'tas']
+        labels = ['Angle of Attack [deg]', 'Angle of Sideslip [deg]', 'Mach Number', 'True Airspeed [m/s]']
         
-        ax = axes.flatten()
-        ax[0].plot(self.t, self.alpha, color='#FFEA00', linewidth=1.2)
-        self._format_ax(ax[0], 'Angle of Attack [deg]')
-        
-        ax[1].plot(self.t, self.beta, color='#FFEA00', linewidth=1.2)
-        self._format_ax(ax[1], 'Angle of Sideslip [deg]')
-        
-        ax[2].plot(self.t, self.mach, color='#FFEA00', linewidth=1.2)
-        self._format_ax(ax[2], 'Mach Number')
-        
-        ax[3].plot(self.t, self.tas, color='#FFEA00', linewidth=1.2)
-        self._format_ax(ax[3], 'True Airspeed [m/s]')
+        for i, ax in enumerate(axes.flatten()):
+            self._plot_all_time(ax, keys[i])
+            self._format_ax(ax, labels[i])
             
         plt.tight_layout()
-        plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
-        plt.close()
+        if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
+        if show: plt.show(block=False)
 
-    def plot_geodetic(self, filename="geodetic.png"):
+    def plot_geodetic(self, filename="geodetic.png", show=False):
         fig, axes = self._setup_figure("Geodetic Position", 2, 2, (10, 6))
-        plot_data = [self.lat, self.lon, self.alt]
+        keys = ['lat', 'lon', 'alt']
         labels = ['Latitude [deg]', 'Longitude [deg]', 'Altitude [m]']
         
-        ax = axes.flatten()
-        for i, sub_ax in enumerate(ax[:-1]):
-            sub_ax.plot(self.t, plot_data[i], color='#AA00FF', linewidth=1.2)
+        ax_flat = axes.flatten()
+        
+        # Plot Time-Histories
+        for i, sub_ax in enumerate(ax_flat[:-1]):
+            self._plot_all_time(sub_ax, keys[i])
             self._format_ax(sub_ax, labels[i])
         
-        ax[3].plot(self.lon, self.lat, color='#AA00FF', linewidth=1.2)
-        self._format_ax(ax[3], 'Latitude [deg]', 'Longitude [deg]')
+        # Ground Track Plot
+        ax_track = ax_flat[3]
+        self._plot_all(ax_track, 'lon', 'lat')
+        self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]')
         
         plt.tight_layout()
-        plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
-        plt.close()
+        if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
+        if show: plt.show(block=False)
         
-    def plot_ned_velocity(self, filename="ned_velocity.png"):
+    def plot_ned_velocity(self, filename="ned_velocity.png", show=False):
         fig, axes = self._setup_figure("Inertial Velocity (NED)", 3, 1, (10, 8))
-        plot_data = [self.u_n, self.v_n, self.w_n]
+        keys = ['u_n', 'v_n', 'w_n']
         labels = ['North Vel [m/s]', 'East Vel [m/s]', 'Down Vel [m/s]']
         
         for i, ax in enumerate(axes.flatten()):
-            ax.plot(self.t, plot_data[i], color='#00BFFF', linewidth=1.2)
+            self._plot_all_time(ax, keys[i])
             self._format_ax(ax, labels[i])
             
         plt.tight_layout()
-        plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
-        plt.close()
+        if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
+        if show: plt.show(block=False)
