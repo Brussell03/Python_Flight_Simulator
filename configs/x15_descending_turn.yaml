@@ -8,7 +8,7 @@ vehicle:
 instructions:
     simulate: true
     perform_trim: true
-    perform_linearization: true
+    perform_linearization: false
     t0_s: 0.0
     tf_s: 10.0
     dt_s: 0.005
@@ -32,9 +32,9 @@ initial_conditions:
     phi_deg: 0.0
     theta_deg: 1.0
     psi_deg: 0.0
-    dela_ach_deg: -1.0
-    dele_ach_deg: -1.0
-    delr_ach_deg: 1.0
+    dela_ach_deg: 0.0
+    dele_ach_deg: 0.0
+    delr_ach_deg: 0.0
     lat_deg: 37.3
     long_deg: -115.8
     m_fuel_kg: 0.0
@@ -42,6 +42,9 @@ initial_conditions:
 trim:
     trim_mode: "descending_turn"
     psidot_dps: 2.0
+    dela_ach_deg: -1.0
+    dele_ach_deg: -1.0
+    delr_ach_deg: 1.0
 
 control:
     type: "doublet"
@@ -52,6 +55,7 @@ control:
     aileron: false
     elevator: false
     rudder: false
+    sas: false
     Kq: 12.0
     Kp: -6.0
     Kyar: 8.0

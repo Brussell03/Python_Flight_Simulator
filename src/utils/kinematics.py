@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-def quat_to_dcm(q0, q1, q2, q3):
+def quat_body_to_nav(q0, q1, q2, q3):
     """Converts unit quaternion to Direction Cosine Matrix (Body to Nav)."""
     C11 = q0**2 + q1**2 - q2**2 - q3**2
     C12 = 2 * (q1*q2 - q0*q3)

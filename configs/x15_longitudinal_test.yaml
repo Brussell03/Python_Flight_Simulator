@@ -51,6 +51,7 @@ control:
     aileron: false # on if control input should act through it
     elevator: true # on if control input should act through it
     rudder: false  # on if control input should act through it
+    sas: true
     Kq: 0.0
     Kp: -7.0
     Kyar: 8.0

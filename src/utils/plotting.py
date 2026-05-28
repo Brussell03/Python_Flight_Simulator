@@ -28,7 +28,10 @@ class SimulatorPlotter:
         self.dela_ach = self.data[:, 14]
         self.dele_ach = self.data[:, 15]
         self.delr_ach = self.data[:, 16]
-        self.throttle = self.data[:, 40]
+        self.dela_cmd = self.data[:, 30]
+        self.dele_cmd = self.data[:, 31]
+        self.delr_cmd = self.data[:, 32]
+        self.throttle = self.data[:, 33]
         
         # Air Data
         self.mach = self.data[:, 20]
@@ -37,10 +40,10 @@ class SimulatorPlotter:
         self.tas = self.data[:, 23]
         
         # Euler Angles
-        self.phi, self.theta, self.psi = self.data[:, 31] * R2D, self.data[:, 32] * R2D, self.data[:, 33] * R2D
+        self.phi, self.theta, self.psi = self.data[:, 24] * R2D, self.data[:, 25] * R2D, self.data[:, 26] * R2D
         
         # NED Velocities
-        self.u_n, self.v_n, self.w_n = self.data[:, 34], self.data[:, 35], self.data[:, 36]
+        self.u_n, self.v_n, self.w_n = self.data[:, 27], self.data[:, 28], self.data[:, 29]
 
     def _setup_figure(self, title, rows, cols, figsize):
         """Internal helper for centralized figure formatting."""
@@ -87,12 +90,26 @@ class SimulatorPlotter:
 
     def plot_controls(self, filename="controls.png"):
         fig, axes = self._setup_figure("Actuation & Controls", 2, 2, (10, 6))
-        plot_data = [self.dela_ach, self.dele_ach, self.delr_ach, self.throttle]
+        
+        # Pair achieved and command data
+        achieved_data = [self.dela_ach, self.dele_ach, self.delr_ach, self.throttle]
+        command_data = [self.dela_cmd, self.dele_cmd, self.delr_cmd, None] # Throttle has no command array mapped
+        
         labels = ['Aileron [deg]', 'Elevator [deg]', 'Rudder [deg]', 'Throttle [%]']
         
         for i, ax in enumerate(axes.flatten()):
-            ax.plot(self.t, plot_data[i], color='#39FF14', linewidth=1.2) 
+            # Plot Achieved
+            ax.plot(self.t, achieved_data[i], color='#39FF14', linewidth=1.5, label='Achieved')
+            
+            # Plot Command
+            if command_data[i] is not None:
+                ax.plot(self.t, command_data[i], color='white', linewidth=1.2, linestyle='--', alpha=0.7, label='Command')
+            
             self._format_ax(ax, labels[i])
+            
+            # Add legend to distinguish lines (using dark background formatting)
+            if command_data[i] is not None:
+                ax.legend(loc='upper right', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
             
         plt.tight_layout()
         plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
@@ -119,14 +136,18 @@ class SimulatorPlotter:
         plt.close()
 
     def plot_geodetic(self, filename="geodetic.png"):
-        fig, axes = self._setup_figure("Geodetic Position", 3, 1, (10, 8))
+        fig, axes = self._setup_figure("Geodetic Position", 2, 2, (10, 6))
         plot_data = [self.lat, self.lon, self.alt]
         labels = ['Latitude [deg]', 'Longitude [deg]', 'Altitude [m]']
         
-        for i, ax in enumerate(axes.flatten()):
-            ax.plot(self.t, plot_data[i], color='#AA00FF', linewidth=1.2)
-            self._format_ax(ax, labels[i])
-            
+        ax = axes.flatten()
+        for i, sub_ax in enumerate(ax[:-1]):
+            sub_ax.plot(self.t, plot_data[i], color='#AA00FF', linewidth=1.2)
+            self._format_ax(sub_ax, labels[i])
+        
+        ax[3].plot(self.lon, self.lat, color='#AA00FF', linewidth=1.2)
+        self._format_ax(ax[3], 'Latitude [deg]', 'Longitude [deg]')
+        
         plt.tight_layout()
         plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
         plt.close()

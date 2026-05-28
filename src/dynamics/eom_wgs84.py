@@ -3,9 +3,9 @@ import numpy as np
 from src.utils.interpolators import fastInterp1
 from src.control.open_loop_control import open_loop_speed_brake, open_loop_throttle
 from src.utils.constants import A_WGS84_M, E_WGS84, OMEGA_E_RPS, G0_MPS2
-from src.utils.kinematics import quat_to_dcm, wind_to_body_dcm
+from src.utils.kinematics import quat_body_to_nav, wind_to_body_dcm
 
-def eom_wgs84(t, x, dx, auxillary_data, vehicle, amod, cmod):
+def eom_wgs84(t, x, dx, auxillary_data, u_trim, vehicle, amod, cmod):
 
     # State Extraction with Descriptive Naming
     u_b_mps, v_b_mps, w_b_mps = x[0], x[1], x[2]
@@ -27,13 +27,15 @@ def eom_wgs84(t, x, dx, auxillary_data, vehicle, amod, cmod):
     m_fuel_dot_kgps = vehicle.get_engine_burn_rate(throttle_perc)
     
     # Trim & Linearization Overrides
-    if cmod.get("trim_flag") == 'on':
+    if cmod.get("trim_flag"):
+        # Surfaces fixed
         dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = dela_ach_deg, dele_ach_deg, delr_ach_deg
-    elif cmod.get("linearization_flag") == 'on':
+    elif cmod.get("linearization_flag"):
+        # Commanded values
         dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = cmod['dela_cmd_deg'], cmod['dele_cmd_deg'], cmod['delr_cmd_deg']
     else:
         # Require the vehicle or SAS object to return control deflections
-        dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = vehicle.get_sas_commands(t, x, cmod)
+        dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = vehicle.get_sas_commands(t, x, cmod, u_trim)
 
     # Atmosphere & Air Data
     rho_kgpm3 = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], h_m)
@@ -48,7 +50,7 @@ def eom_wgs84(t, x, dx, auxillary_data, vehicle, amod, cmod):
 
     # Kinematics Interface
     C_w2b = wind_to_body_dcm(alpha_rad, beta_rad)
-    C_b2n = quat_to_dcm(q0, q1, q2, q3)
+    C_b2n = quat_body_to_nav(q0, q1, q2, q3)
     C_n2b = C_b2n.T
 
     # Navigation & WGS-84 Radii

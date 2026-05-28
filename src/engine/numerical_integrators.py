@@ -59,7 +59,7 @@ def AB2(f, t_s, x, h_s, vmod, amod, cmod, Auxillary_Data_Accumulated):
 
 	return t_s, x, Auxillary_Data_Accumulated
 
-def RK4(f, t_s, x, h_s, vmod, amod, cmod, Auxillary_Data_Accumulated):
+def RK4(f, t_s, x, h_s, vmod, amod, cmod, u_trim, Auxillary_Data_Accumulated):
 	"""
 	Performs the 4th order Runge-Kutta method to approximate the solution of a differential equation.
 
@@ -78,13 +78,13 @@ def RK4(f, t_s, x, h_s, vmod, amod, cmod, Auxillary_Data_Accumulated):
 	auxillary_data = np.empty((16,), dtype=float)
 
 	for i in range(1, len(t_s)):
-		fim1_k1, auxillary_data = f(t_s[i-1], x[:,i-1], dx, auxillary_data, vmod, amod, cmod)
+		fim1_k1, auxillary_data = f(t_s[i-1], x[:,i-1], dx, auxillary_data, u_trim, vmod, amod, cmod)
 		k1 = h_s*fim1_k1
-		fim1_k2, _ = f(t_s[i-1] + 0.5*h_s, x[:,i-1] + 0.5*k1, dx, auxillary_data, vmod, amod, cmod)
+		fim1_k2, _ = f(t_s[i-1] + 0.5*h_s, x[:,i-1] + 0.5*k1, dx, auxillary_data, u_trim, vmod, amod, cmod)
 		k2 = h_s*fim1_k2
-		fim1_k3, _ = f(t_s[i-1] + 0.5*h_s, x[:,i-1] + 0.5*k2, dx, auxillary_data, vmod, amod, cmod)
+		fim1_k3, _ = f(t_s[i-1] + 0.5*h_s, x[:,i-1] + 0.5*k2, dx, auxillary_data, u_trim, vmod, amod, cmod)
 		k3 = h_s*fim1_k3
-		fim1_k4, _ = f(t_s[i-1] + h_s, x[:,i-1] + k3, dx, auxillary_data, vmod, amod, cmod)
+		fim1_k4, _ = f(t_s[i-1] + h_s, x[:,i-1] + k3, dx, auxillary_data, u_trim, vmod, amod, cmod)
 		k4 = h_s*fim1_k4 
 		x[:,i] = x[:,i-1] + 1/6*(k1 + 2.0*k2 + 2.0*k3 + k4)
 		

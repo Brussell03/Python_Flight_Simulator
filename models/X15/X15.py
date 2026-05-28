@@ -207,45 +207,65 @@ class X15(Vehicle):
         return Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2
     
     def pitch_control(self, t_s, q_b_rps, cmod):
-        
         dele_stick_deg = 0.0
         
         # Elevator motion due to pilot stick input
         if cmod["elevator"] and (cmod["t1_s"] <= t_s <= cmod["t3_s"]):
             dele_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
         
+        # SAS feedback applied conditionally
+        dele_sas_deg = cmod["Kq"] * q_b_rps if cmod["sas"] else 0.0
+        
         # Elevator action is superposition of pilot input and SAS
-        return cmod["Kq"] * q_b_rps + dele_stick_deg
+        return dele_sas_deg + dele_stick_deg
 
     # Roll control via aileron
     def roll_control(self, t_s, p_b_rps, r_b_rps, cmod):
-        
         dela_stick_deg = 0.0
         
         # Aileron motion due to pilot stick input
         if cmod["aileron"] and (cmod["t1_s"] <= t_s <= cmod["t3_s"]):
             dela_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
         
+        # SAS feedback applied conditionally
+        dela_sas_deg = (cmod["Kp"] * p_b_rps + cmod["Kyar"] * r_b_rps) if cmod["sas"] else 0.0
+        
         # Aileron deflection due to pilot input and SAS
-        return cmod["Kp"] * p_b_rps + cmod["Kyar"] * r_b_rps + dela_stick_deg
+        return dela_sas_deg + dela_stick_deg
 
     # Yaw control via rudder
     def yaw_control(self, t_s, r_b_rps, cmod):
-        
         delr_pedal_deg = 0.0
+        
+        # Rudder motion due to pilot pedal input
         if cmod["rudder"] and (cmod["t1_s"] <= t_s <= cmod["t3_s"]):
             delr_pedal_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
             
-        return cmod["Kr"] * r_b_rps + delr_pedal_deg
+        # SAS feedback applied conditionally
+        delr_sas_deg = cmod["Kr"] * r_b_rps if cmod["sas"] else 0.0
+            
+        return delr_sas_deg + delr_pedal_deg
 
-    def get_sas_commands(self, t, x, cmod):
+    def get_sas_commands(self, t, x, cmod, u_trim):
         """
-        Routes the Stability Augmentation System.
+        Routes the Stability Augmentation System and superimposes commands over trim baseline.
+        u_trim is expected as [dela_trim, dele_trim, delr_trim, throttle_trim]
         """
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
-        dela_cmd_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)
-        dele_cmd_deg = self.pitch_control(t, q_b_rps, cmod)
-        delr_cmd_deg = self.yaw_control(t, r_b_rps, cmod)
+        # Extract trim baselines
+        dela_trim_deg = u_trim[0]
+        dele_trim_deg = u_trim[1]
+        delr_trim_deg = u_trim[2]
+        
+        # Calculate dynamic commands (Stick + Feedback)
+        dela_dynamic_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)
+        dele_dynamic_deg = self.pitch_control(t, q_b_rps, cmod)
+        delr_dynamic_deg = self.yaw_control(t, r_b_rps, cmod)
+        
+        # Superimpose dynamic commands onto trim baseline
+        dela_cmd_deg = dela_trim_deg + dela_dynamic_deg
+        dele_cmd_deg = dele_trim_deg + dele_dynamic_deg
+        delr_cmd_deg = delr_trim_deg + delr_dynamic_deg
         
         return dela_cmd_deg, dele_cmd_deg, delr_cmd_deg

@@ -37,7 +37,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         auxillary_data = np.empty((16,), dtype=float)
         
         # Call the EOM
-        dx, auxillary_data = eom_wgs84(0, x_full, dx, auxillary_data, vehicle, amod, cmod)
+        dx, auxillary_data = eom_wgs84(0, x_full, dx, auxillary_data, None, vehicle, amod, cmod)
         
         if tmod["trim_mode"] == 'steady_glide':
             cost = dx[0]**2 + dx[1]**2 + dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2
@@ -178,8 +178,8 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     # 3. Setup and Execution
     print("--- Unpowered Trim Solver ---")
     
-    tmod['trim_flag'] = tmod.get('trim_flag', 'off') # Defaults to 'off' if missing
-    tmod['linearization_flag'] = tmod.get('linearization_flag', 'off')
+    cmod['trim_flag'] = cmod.get('trim_flag', False) # Defaults to off if missing
+    cmod['linearization_flag'] = cmod.get('linearization_flag', False)
     
     # 1. Extract initial guesses from the passed configuration vectors
     V_T_curr_mps = math.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
@@ -254,16 +254,16 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     warnings.filterwarnings("ignore", category=RuntimeWarning, message="Values in x were outside bounds during a minimize step")
 
     bounds = [(-np.inf, np.inf)] * 16
-    bounds[7]  = (-math.pi/3, math.pi/3)         
-    bounds[9]  = (-math.pi/2, math.pi/2)         
-    bounds[10] = (-math.pi, math.pi)             
-    bounds[11] = (0, np.inf)                     
+    bounds[7]  = (-math.pi/3, math.pi/3)
+    bounds[9]  = (-math.pi/2, math.pi/2)
+    bounds[10] = (-math.pi, math.pi)
+    bounds[11] = (0, np.inf)
     bounds[12] = (-math.pi/4*R2D, math.pi/4*R2D)
     bounds[13] = (-math.pi/4*R2D, math.pi/4*R2D)
     bounds[14] = (-math.pi/4*R2D, math.pi/4*R2D)
     bounds[15] = (0, vehicle.m_wet_kg - vehicle.m_dry_kg) # Dynamically accessed from vehicle object
     
-    tmod["trim_flag"] = 'on'
+    cmod["trim_flag"] = True
 
     print("Solving for trim state...")
     result = minimize(
@@ -275,6 +275,8 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         constraints = define_trim_constraints(),
         options={'disp': True, 'ftol': 1e-8, 'maxiter': 300}
     )
+    
+    cmod["trim_flag"] = False
     
     # 4. Process Results
     x_trim = result.x
@@ -295,7 +297,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     auxillary_data = np.empty((16,), dtype=float)
     
     x_trim_full = np.concatenate((x_trim[0:6], [q0, q1, q2, q3], x_trim[9:]))
-    dx, auxillary_data = eom_wgs84(0, x_trim_full, dx, auxillary_data, vehicle, amod, cmod)
+    dx, auxillary_data = eom_wgs84(0, x_trim_full, dx, auxillary_data, None, vehicle, amod, cmod)
 
     if result.success:
         

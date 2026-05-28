@@ -20,6 +20,7 @@ def run_job(config_path):
     state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
     
     # 2. Trim & Analysis Dispatch
+    u_trim = np.zeros(4)
     if instruction_cfg.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
         x_trim, u_trim, msg = trim_solver(vehicle, amod, control_cfg, trim_cfg, x0)
@@ -46,7 +47,7 @@ def run_job(config_path):
     x[:, 0] = x0
     aux_data_accum = np.zeros((16, nt_s))
 
-    t_s, x, aux_data_accum = RK4(eom_wgs84, t_s, x, dt_s, vehicle, amod, control_cfg, aux_data_accum)
+    t_s, x, aux_data_accum = RK4(eom_wgs84, t_s, x, dt_s, vehicle, amod, control_cfg, u_trim, aux_data_accum)
 
     # 4. Vectorized Post-Processing
     print("\n--- Post-Processing Data ---")
@@ -69,106 +70,62 @@ def run_job(config_path):
     sel_state_delr_ach_deg = 15
     sel_state_m_fuel_kg    = 16
     
-    sel_auxillary_data_dela_deg     = 0
-    sel_auxillary_data_dele_deg     = 1
-    sel_auxillary_data_delr_deg     = 2
+    sel_auxillary_data_dela_cmd_deg     = 0
+    sel_auxillary_data_dele_cmd_deg     = 1
+    sel_auxillary_data_delr_cmd_deg     = 2
     sel_auxillary_data_delt_percent = 3
         
     # Preallocate variables
     Cs_mps      = np.zeros((nt_s,1))
     Rho_kgpm3   = np.zeros((nt_s,1))
-    C_phi       = np.zeros((nt_s,1))
-    C_theta     = np.zeros((nt_s,1))
-    C_psi       = np.zeros((nt_s,1))
-    S_phi       = np.zeros((nt_s,1))
-    S_theta     = np.zeros((nt_s,1))
-    S_psi       = np.zeros((nt_s,1))
-    T_theta     = np.zeros((nt_s,1))
-    C_b2n_11    = np.zeros((nt_s,1))
-    C_b2n_12    = np.zeros((nt_s,1))
-    C_b2n_13    = np.zeros((nt_s,1))
-    C_b2n_21    = np.zeros((nt_s,1))
-    C_b2n_22    = np.zeros((nt_s,1))
-    C_b2n_23    = np.zeros((nt_s,1))
-    C_b2n_31    = np.zeros((nt_s,1))
-    C_b2n_32    = np.zeros((nt_s,1))
-    C_b2n_33    = np.zeros((nt_s,1))
     u_n_mps     = np.zeros((nt_s,1)) 
     v_n_mps     = np.zeros((nt_s,1))
     w_n_mps     = np.zeros((nt_s,1)) 
-    phi_2_rad   = np.zeros((nt_s,1)) 
-    theta_2_rad = np.zeros((nt_s,1))
-    psi_2_rad   = np.zeros((nt_s,1)) 
-    Transport_Rate_rps = np.zeros((nt_s,1))
-    Coriolis_mps2      = np.zeros((nt_s,1))
-    North_dist_m       = np.zeros((nt_s,1))
-    East_dist_m        = np.zeros((nt_s,1))
+    phi_rad   = np.zeros((nt_s,1)) 
+    theta_rad = np.zeros((nt_s,1))
+    psi_rad   = np.zeros((nt_s,1))
     
-    for i, element in enumerate(t_s):
-        Altitude_m       = x[sel_state_h_m,i]
-        Cs_mps[i,0]      = fastInterp1(amod["alt_m"], amod["c_mps"],     Altitude_m)
-        Rho_kgpm3[i,0]   = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], Altitude_m)
-        
-        # Extract Quaternion
-        q0, q1, q2, q3 = x[sel_state_q0,i], x[sel_state_q1,i], x[sel_state_q2,i], x[sel_state_q3,i]
-        
-        # Compute DCM from Quaternion
-        C_b2n_11[i,0] = q0**2 + q1**2 - q2**2 - q3**2
-        C_b2n_12[i,0] = 2 * (q1*q2 - q0*q3)
-        C_b2n_13[i,0] = 2 * (q1*q3 + q0*q2)
-        C_b2n_21[i,0] = 2 * (q1*q2 + q0*q3)
-        C_b2n_22[i,0] = q0**2 - q1**2 + q2**2 - q3**2
-        C_b2n_23[i,0] = 2 * (q2*q3 - q0*q1)
-        C_b2n_31[i,0] = 2 * (q1*q3 - q0*q2)
-        C_b2n_32[i,0] = 2 * (q2*q3 + q0*q1)
-        C_b2n_33[i,0] = q0**2 - q1**2 - q2**2 + q3**2
-        
-        # Recover Euler Angles for Plots
-        phi_2_rad[i,0]   = math.atan2(2*(q0*q1 + q2*q3), 1 - 2*(q1**2 + q2**2))
-        theta_2_rad[i,0] = math.asin(np.clip(2*(q0*q2 - q3*q1), -1.0, 1.0))
-        psi_2_rad[i,0]   = math.atan2(2*(q0*q3 + q1*q2), 1 - 2*(q2**2 + q3**2))
-        
-        # Backfill legacy trig arrays for output consistency
-        C_phi[i,0], S_phi[i,0]     = math.cos(phi_2_rad[i,0]), math.sin(phi_2_rad[i,0])
-        C_theta[i,0], S_theta[i,0] = math.cos(theta_2_rad[i,0]), math.sin(theta_2_rad[i,0])
-        C_psi[i,0], S_psi[i,0]     = math.cos(psi_2_rad[i,0]), math.sin(psi_2_rad[i,0])
-        T_theta[i,0]               = math.tan(theta_2_rad[i,0])
-        
-        u_b_mps = x[sel_state_u_b_mps,i]
-        v_b_mps = x[sel_state_v_b_mps,i]
-        w_b_mps = x[sel_state_w_b_mps,i]
-        
-        u_n_mps[i,0]     =  C_b2n_11[i,0]*u_b_mps + C_b2n_12[i,0]*v_b_mps + C_b2n_13[i,0]*w_b_mps
-        v_n_mps[i,0]     =  C_b2n_21[i,0]*u_b_mps + C_b2n_22[i,0]*v_b_mps + C_b2n_23[i,0]*w_b_mps
-        w_n_mps[i,0]     =  C_b2n_31[i,0]*u_b_mps + C_b2n_32[i,0]*v_b_mps + C_b2n_33[i,0]*w_b_mps
-        
-        # WGS-84 Local parameters
-        lat_rad = x[sel_state_lat_rad, i]
-        long_rad = x[sel_state_long_rad, i]
-        den = math.sqrt(1.0 - (E_WGS84 * math.sin(lat_rad))**2)
-        RN = A_WGS84_M / den
-        RM = (A_WGS84_M * (1.0 - E_WGS84**2)) / (den**3)
-        
-        # WGS-84 Cartesian Trajectory Reconstruction
-        North_dist_m[i,0] = (lat_rad - x[sel_state_lat_rad,0]) * RM
-        East_dist_m[i,0]  = (long_rad - x[sel_state_long_rad,0]) * RN * math.cos(x[sel_state_lat_rad,0])
-        
-        # WGS-84 Kinematic Quantities
-        v_N, v_E, v_D = u_n_mps[i,0], v_n_mps[i,0], w_n_mps[i,0]
-        
-        omega_en_N = v_E / (RN + Altitude_m)
-        omega_en_E = -v_N / (RM + Altitude_m)
-        omega_en_D = -v_E * math.tan(lat_rad) / (RN + Altitude_m)
-        Transport_Rate_rps[i,0] = math.sqrt(omega_en_N**2 + omega_en_E**2 + omega_en_D**2)
+    altitude_m_arr = x[sel_state_h_m, :]
+    Cs_mps    = np.array([fastInterp1(amod["alt_m"], amod["c_mps"],     alt) for alt in altitude_m_arr])[:, np.newaxis]
+    Rho_kgpm3 = np.array([fastInterp1(amod["alt_m"], amod["rho_kgpm3"], alt) for alt in altitude_m_arr])[:, np.newaxis]
 
-        omega_ie_N = OMEGA_E_RPS * math.cos(lat_rad)
-        omega_ie_E = 0.0
-        omega_ie_D = -OMEGA_E_RPS * math.sin(lat_rad)
+    # Extract Quaternions
+    q0 = x[sel_state_q0, :]
+    q1 = x[sel_state_q1, :]
+    q2 = x[sel_state_q2, :]
+    q3 = x[sel_state_q3, :]
 
-        cor_N = 2 * (omega_ie_E * v_D - omega_ie_D * v_E)
-        cor_E = 2 * (omega_ie_D * v_N - omega_ie_N * v_D)
-        cor_D = 2 * (omega_ie_N * v_E - omega_ie_E * v_N)
-        Coriolis_mps2[i,0] = math.sqrt(cor_N**2 + cor_E**2 + cor_D**2)
+    # Compute DCM for all timesteps simultaneously
+    C_b2n = np.zeros((len(t_s), 3, 3))
+    C_b2n[:, 0, 0] = q0**2 + q1**2 - q2**2 - q3**2
+    C_b2n[:, 0, 1] = 2 * (q1*q2 - q0*q3)
+    C_b2n[:, 0, 2] = 2 * (q1*q3 + q0*q2)
+    C_b2n[:, 1, 0] = 2 * (q1*q2 + q0*q3)
+    C_b2n[:, 1, 1] = q0**2 - q1**2 + q2**2 - q3**2
+    C_b2n[:, 1, 2] = 2 * (q2*q3 - q0*q1)
+    C_b2n[:, 2, 0] = 2 * (q1*q3 - q0*q2)
+    C_b2n[:, 2, 1] = 2 * (q2*q3 + q0*q1)
+    C_b2n[:, 2, 2] = q0**2 - q1**2 - q2**2 + q3**2
+
+    # Euler Angle Recovery
+    phi_rad   = np.arctan2(2 * (q0*q1 + q2*q3), 1 - 2 * (q1**2 + q2**2))[:, np.newaxis]
+    theta_rad = np.arcsin(np.clip(2 * (q0*q2 - q3*q1), -1.0, 1.0))[:, np.newaxis]
+    psi_rad   = np.arctan2(2 * (q0*q3 + q1*q2), 1 - 2 * (q2**2 + q3**2))[:, np.newaxis]
+
+    # Extract and stack all Body Velocities into an (N, 3, 1) matrix column tensor
+    vel_b = np.vstack([
+        x[sel_state_u_b_mps, :],
+        x[sel_state_v_b_mps, :],
+        x[sel_state_w_b_mps, :]
+    ]).T[:, :, np.newaxis]
+
+    # Fast Batch Matrix Multiplication
+    vel_n = C_b2n @ vel_b
+
+    # Unpack final Nav frame coordinates into (N, 1) column vectors
+    u_n_mps = vel_n[:, 0, :]
+    v_n_mps = vel_n[:, 1, :]
+    w_n_mps = vel_n[:, 2, :]
     
     # Airspeed
     True_Airspeed_mps  = np.zeros((nt_s,1))
@@ -211,9 +168,6 @@ def run_job(config_path):
     # 4 p_b_rps, roll angular velocity of body fixed CS with respect to inertial CS
     # 5 q_b_rps, pitch angular velocity of body fixed CS with respect to inertial CS
     # 6 r_b_rps, yaw angular velocity of body fixed CS with respect to inertial CS
-    # 7 phi_rad, roll angle
-    # 8 theta_rad, pitch angle
-    # 9 psi_rad, yaw angle
     # 7 q0 quaternion scalar component
     # 8 q1 quaternion vector i-axis component
     # 9 q2 quaternion vector j-axis component
@@ -231,42 +185,34 @@ def run_job(config_path):
     # 21 Alpha_rad, Angle of attack (row vector)
     # 22 Beta_rad, Angle of sideslip (row vector)
     # 23 True_Airspeed_mps, True airspeed (row vector)
-    # 24 C_phi, cosine of roll angle (row vector)
-    # 25 C_theta, cosine of pitch angle (row vector)
-    # 26 C_psi, cosine of yaw angle (row vector)
-    # 27 S_phi, sine of roll angle (row vector)
-    # 28 S_theta, sine of pitch angle (row vector)
-    # 29 S_psi, sine of yaw angle (row vector)
-    # 30 T_theta, tangent of pitch angle (row vector)
-    # 31 phi_2_rad, roll angle
-    # 32 theta_2_rad, pitch angle
-    # 33 psi_2_rad, yaw angle
-    # 34 u_n_mps, axial velocity of CM wrt inertial CS resolved in NED CS
-    # 35 v_n_mps, lateral velocity of CM wrt inertial CS resolved in NED CS
-    # 36 w_n_mps, vertical velocity of CM wrt inertial CS resolved in NED CS
-    # 37 dela_deg, aileron command
-    # 38 dele_deg, elevator command
-    # 39 delr_deg, rudder command
-    # 40 delt_percent, throttle as a percent from 0 to 100.
+    # 24 phi_rad, roll angle
+    # 25 theta_rad, pitch angle
+    # 26 psi_rad, yaw angle
+    # 27 u_n_mps, axial velocity of CM wrt inertial CS resolved in NED CS
+    # 28 v_n_mps, lateral velocity of CM wrt inertial CS resolved in NED CS
+    # 29 w_n_mps, vertical velocity of CM wrt inertial CS resolved in NED CS
+    # 30 dela_cmd_deg, aileron command
+    # 31 dele_cmd_deg, elevator command
+    # 32 delr_cmd_deg, rudder command
+    # 33 delt_percent, throttle as a percent from 0 to 100.
     #
     #==============================================================================
 
     # Get auxillary data 
-    dela_deg        = aux_data_accum[sel_auxillary_data_dela_deg,:]
-    dela_deg        = dela_deg[:, np.newaxis]
-    dele_deg        = aux_data_accum[sel_auxillary_data_dele_deg,:]
-    dele_deg        = dele_deg[:, np.newaxis]
-    delr_deg        = aux_data_accum[sel_auxillary_data_delr_deg,:]
-    delr_deg        = delr_deg[:, np.newaxis]
-    delt_percent    = aux_data_accum[sel_auxillary_data_delt_percent,:]
-    delt_percent    = delt_percent[:, np.newaxis]
+    dela_cmd_deg   = aux_data_accum[sel_auxillary_data_dela_cmd_deg,:]
+    dela_cmd_deg   = dela_cmd_deg[:, np.newaxis]
+    dele_cmd_deg   = aux_data_accum[sel_auxillary_data_dele_cmd_deg,:]
+    dele_cmd_deg   = dele_cmd_deg[:, np.newaxis]
+    delr_cmd_deg   = aux_data_accum[sel_auxillary_data_delr_cmd_deg,:]
+    delr_cmd_deg   = delr_cmd_deg[:, np.newaxis]
+    delt_percent   = aux_data_accum[sel_auxillary_data_delt_percent,:]
+    delt_percent   = delt_percent[:, np.newaxis]
 
     # Combine state date with time and other post processed data
     t_s = t_s[:, np.newaxis]
     sim_data = np.concatenate( (t_s, x.T, Cs_mps, Rho_kgpm3, Mach, Alpha_rad, \
-                                Beta_rad, True_Airspeed_mps, C_phi, C_theta, C_psi, S_phi, \
-                                S_theta, S_psi, T_theta, phi_2_rad, theta_2_rad, psi_2_rad, \
-                                u_n_mps, v_n_mps, w_n_mps, dela_deg, dele_deg, delr_deg, \
+                                Beta_rad, True_Airspeed_mps, phi_rad, theta_rad, psi_rad, \
+                                u_n_mps, v_n_mps, w_n_mps, dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, \
                                 delt_percent), axis=1 )
 
     # 5. Output Management
@@ -284,7 +230,7 @@ def run_job(config_path):
             os.makedirs(data_dir, exist_ok=True)
             save_path = os.path.join(data_dir, f"{job_name}.npy")
             np.save(save_path, sim_data)
-            print(f"\n--- Output Saved ---")
+            print(f"\n--- Saving Output ---")
             print(f"Data saved to: {save_path}")
 
         # Dispatch Plots Based on Config Booleans
@@ -294,15 +240,13 @@ def run_job(config_path):
             os.makedirs(plot_dir, exist_ok=True)
             plotter = SimulatorPlotter(sim_data, plot_dir=plot_dir)
             
-            print(f"Generating plots to: {plot_dir}")
             if plot_cfg.get('6dof', False):         plotter.plot_6dof()
             if plot_cfg.get('attitude', False):     plotter.plot_attitude()
             if plot_cfg.get('controls', False):     plotter.plot_controls()
             if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics()
             if plot_cfg.get('geodetic', False):     plotter.plot_geodetic()
             if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity()
-            
-    print("\n")
+            print(f"Plots saved to: {plot_dir}")
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py configs/x15_descending_turn.yaml
