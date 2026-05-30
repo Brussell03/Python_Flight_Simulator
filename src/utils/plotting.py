@@ -47,8 +47,8 @@ class SimulatorPlotter:
         fig.suptitle(title, color='#E0E0E0', fontsize=14, fontweight='bold')
         return fig, np.atleast_1d(axes)
 
-    def _format_ax(self, ax, ylabel, xlabel='Time [s]'):
-        """Internal helper for clean, dark-mode axis aesthetics."""
+    def _format_ax(self, ax, ylabel, xlabel='Time [s]', equal_aspect=False, min_range=1e-2):
+        """Internal helper for clean, dark-mode axis aesthetics and scaling limits."""
         ax.set_facecolor('#1E1E1E')
         ax.set_ylabel(ylabel, color='#B0B0B0', fontsize=10)
         ax.set_xlabel(xlabel, color='#B0B0B0', fontsize=10)
@@ -56,22 +56,42 @@ class SimulatorPlotter:
         ax.grid(color='#333333', linestyle='--', linewidth=0.5)
         for spine in ax.spines.values():
             spine.set_color('#404040')
+        
+        if equal_aspect:
+            # Source: Matplotlib documentation for set_aspect
+            ax.set_aspect('equal', adjustable='datalim')
+        
+        # Enforce minimum axis ranges to prevent micro-scaling on noise
+        ymin, ymax = ax.get_ylim()
+        if abs(ymax - ymin) < min_range:
+            mid = (ymax + ymin) / 2.0
+            ax.set_ylim(mid - min_range / 2.0, mid + min_range / 2.0)
+            
+        xmin, xmax = ax.get_xlim()
+        if abs(xmax - xmin) < min_range:
+            mid = (xmax + xmin) / 2.0
+            ax.set_xlim(mid - min_range / 2.0, mid + min_range / 2.0)
     
     def _plot_all_time(self, ax, key):
-        """Helper to loop through all loaded datasets."""
+        """Helper to loop through all loaded datasets, skipping None and NaN arrays."""
         for i, ds in enumerate(self.datasets):
-            if key and ds[key] is not None:
+            if key and ds[key] is not None and not np.all(np.isnan(ds[key])):
                 ax.plot(ds['t'], ds[key], color=self.colors[i], linewidth=1.2, label=ds['name'])
-        if len(self.datasets) > 1:
-            ax.legend(loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
+        
+        # Only draw legend if there are items to show
+        handles, labels = ax.get_legend_handles_labels()
+        if handles and len(self.datasets) > 1:
+            ax.legend(handles, labels, loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
     
     def _plot_all(self, ax, keyX, keyY):
-        """Helper to loop through all loaded datasets."""
+        """Helper to loop through all loaded datasets, skipping None and NaN arrays."""
         for i, ds in enumerate(self.datasets):
-            if keyX and keyY and ds[keyX] is not None and ds[keyY] is not None:
+            if keyX and keyY and ds[keyX] is not None and ds[keyY] is not None and not np.all(np.isnan(ds[keyX])) and not np.all(np.isnan(ds[keyY])):
                 ax.plot(ds[keyX], ds[keyY], color=self.colors[i], linewidth=1.2, label=ds['name'])
-        if len(self.datasets) > 1:
-            ax.legend(loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
+        
+        handles, labels = ax.get_legend_handles_labels()
+        if handles and len(self.datasets) > 1:
+            ax.legend(handles, labels, loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
 
     def plot_6dof(self, filename="6dof.png", show=False):
         fig, axes = self._setup_figure("6-DOF State Vectors", 2, 3, (12, 8))
@@ -87,7 +107,7 @@ class SimulatorPlotter:
         if show: plt.show(block=False)
 
     def plot_attitude(self, filename="attitude.png", show=False):
-        fig, axes = self._setup_figure("Euler Angles", 3, 1, (10, 8))
+        fig, axes = self._setup_figure("Euler Angles", 3, 1, (10, 6))
         keys = ['phi', 'theta', 'psi']
         labels = ['Roll Angle [deg]', 'Pitch Angle [deg]', 'Yaw Angle [deg]']
         
@@ -122,7 +142,8 @@ class SimulatorPlotter:
                     ax.plot(ds['t'], ds[cmd_k], color='white', linewidth=1.2, linestyle='--', alpha=0.7, label=f"{ds['name']} (Cmd)")
             
             self._format_ax(ax, labels[i])
-            ax.legend(loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
+            handles, labels_leg = ax.get_legend_handles_labels()
+            if handles: ax.legend(handles, labels_leg, loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
             
         plt.tight_layout()
         if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
@@ -156,14 +177,14 @@ class SimulatorPlotter:
         # Ground Track Plot
         ax_track = ax_flat[3]
         self._plot_all(ax_track, 'lon', 'lat')
-        self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]')
+        self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]', equal_aspect=True)
         
         plt.tight_layout()
         if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)
         if show: plt.show(block=False)
         
     def plot_ned_velocity(self, filename="ned_velocity.png", show=False):
-        fig, axes = self._setup_figure("Inertial Velocity (NED)", 3, 1, (10, 8))
+        fig, axes = self._setup_figure("Inertial Velocity (NED)", 3, 1, (10, 6))
         keys = ['u_n', 'v_n', 'w_n']
         labels = ['North Vel [m/s]', 'East Vel [m/s]', 'Down Vel [m/s]']
         

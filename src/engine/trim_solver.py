@@ -34,7 +34,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         x_full = np.concatenate(([u, v, w, p, q, r], [q0, q1, q2, q3], rest_of_state))
         
         dx = np.empty((17,), dtype=float)
-        auxillary_data = np.empty((16,), dtype=float)
+        auxillary_data = np.empty((7,), dtype=float)
         
         # Call the EOM
         dx, auxillary_data = eom_wgs84(0, x_full, dx, auxillary_data, None, vehicle, amod, cmod)
@@ -44,7 +44,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         elif tmod["trim_mode"] == 'moment_equilibrium':
             cost = dx[3]**2 + dx[4]**2 + dx[5]**2
         elif tmod["trim_mode"] == 'descending_turn':
-            p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[13], auxillary_data[14], auxillary_data[15]
+            p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[4], auxillary_data[5], auxillary_data[6]
             psidot_current = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
             cost = 0*dx[0]**2 + dx[1]**2 + 0*dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2 + 1e1*(psidot_current-psidot_target_rps)**2
         else:
@@ -294,7 +294,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     q3 = cphi * cthe * spsi - sphi * sthe * cpsi
     
     dx = np.empty((17,), dtype=float)
-    auxillary_data = np.empty((16,), dtype=float)
+    auxillary_data = np.empty((7,), dtype=float)
     
     x_trim_full = np.concatenate((x_trim[0:6], [q0, q1, q2, q3], x_trim[9:]))
     dx, auxillary_data = eom_wgs84(0, x_trim_full, dx, auxillary_data, None, vehicle, amod, cmod)
@@ -302,7 +302,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     if result.success:
         
         # Calculate proper Euler Rates using kinematic equations
-        p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[13], auxillary_data[14], auxillary_data[15]
+        p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[4], auxillary_data[5], auxillary_data[6]
         
         phi_rad_dot   = p_nb_rps + q_nb_rps * math.sin(phi_rad) * math.tan(theta_rad) + r_nb_rps * math.cos(phi_rad) * math.tan(theta_rad)
         theta_rad_dot = q_nb_rps * math.cos(phi_rad) - r_nb_rps * math.sin(phi_rad)

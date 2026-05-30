@@ -3,6 +3,7 @@ import os
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from src.engine.compare_data import compare_data_to_file
 from src.utils.config_parser import load_simulation_config
@@ -10,7 +11,7 @@ from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
 from src.dynamics.eom_wgs84 import eom_wgs84
 from src.utils.interpolators import fastInterp1
-from src.engine.numerical_integrators import RK4
+from src.engine.numerical_integrators import RK4, adaptive_integration
 from src.utils.plotting import SimulatorPlotter
 from src.utils.constants import D2R, R2D, A_WGS84_M, E_WGS84, OMEGA_E_RPS
 
@@ -40,16 +41,44 @@ def run_job(config_path):
                 analyze_mode_shapes(A, core_state_names)
                 plot_linear_response(A, B, t_end=30.0) # Set to 30s to watch the unstable modes diverge
                 advanced_stability_analysis(A, B, core_state_names, core_control_names)
-
+    
     # 3. Execution Loop
     print("\n--- Running 6-DOF Simulation ---")
     t_s = np.arange(t0_s, tf_s + dt_s, dt_s)
     nt_s = t_s.size
-    x = np.zeros((len(x0), nt_s))
-    x[:, 0] = x0
-    aux_data_accum = np.zeros((16, nt_s))
-
-    t_s, x, aux_data_accum = RK4(eom_wgs84, t_s, x, dt_s, vehicle, amod, control_cfg, u_trim, aux_data_accum)
+    
+    # Route Integrator Configuration
+    integrator_type = instruction_cfg.get('integrator', 'RK45')
+    adaptive_methods = ['RK45', 'RK23', 'DOP853', 'Radau', 'BDF', 'LSODA']
+    
+    if integrator_type in adaptive_methods:
+        t_span = (t0_s, tf_s + dt_s)
+        
+        t_s, x, aux_data_accum = adaptive_integration(
+            eom_wgs84, t_span, t_s, x0, vehicle, amod, control_cfg, u_trim, 
+            method=integrator_type, rtol=1e-6, atol=1e-6
+        )
+        
+    else:
+        # Fallback to Fixed-Step RK4
+        print(f"[Fixed-Step {integrator_type} Integration Engine Active]")
+        
+        x = np.zeros((len(x0), nt_s))
+        x[:, 0] = x0
+        aux_data_accum = np.zeros((4, nt_s))
+        
+        dx_tmp = np.empty(x.shape[0], dtype=float)
+        aux_tmp = np.empty(4, dtype=float)
+        
+        for i in tqdm(range(nt_s - 1), desc="Simulating", unit="steps", leave=True):
+            t_i = t_s[i]
+            x_i = x[:, i]
+            
+            x[:, i + 1], aux_tmp = RK4(eom_wgs84, t_i, x_i, dt_s, vehicle, amod, control_cfg, u_trim, dx_tmp, aux_tmp)
+            aux_data_accum[:, i + 1] = aux_tmp
+            
+        # Ensure aux data lines up for t=0
+        _, aux_data_accum[:, 0] = eom_wgs84(t_s[0], x[:, 0], dx_tmp, aux_tmp, vehicle, amod, control_cfg, u_trim)
 
     # 4. Vectorized Post-Processing
     print("\n--- Post-Processing Data ---")
@@ -72,9 +101,9 @@ def run_job(config_path):
     sel_state_delr_ach_deg = 15
     sel_state_m_fuel_kg    = 16
     
-    sel_auxillary_data_dela_cmd_deg     = 0
-    sel_auxillary_data_dele_cmd_deg     = 1
-    sel_auxillary_data_delr_cmd_deg     = 2
+    sel_auxillary_data_dela_cmd_deg = 0
+    sel_auxillary_data_dele_cmd_deg = 1
+    sel_auxillary_data_delr_cmd_deg = 2
     sel_auxillary_data_delt_percent = 3
         
     # Preallocate variables
@@ -129,33 +158,34 @@ def run_job(config_path):
     v_n_mps = vel_n[:, 1, :]
     w_n_mps = vel_n[:, 2, :]
     
-    # Airspeed
-    True_Airspeed_mps  = np.zeros((nt_s,1))
-    for i, element in enumerate(t_s):
-        True_Airspeed_mps[i,0] = math.sqrt(x[sel_state_u_b_mps,i]**2 + x[sel_state_v_b_mps,i]**2 + x[sel_state_w_b_mps,i]**2)
-        
-    # Angle of attack
-    Alpha_rad = np.zeros((nt_s,1))
-    for i, element in enumerate(t_s):  
-        if x[sel_state_u_b_mps,i] == 0:
-            w_over_u = 0
-        else:
-            w_over_u = x[2,i]/x[sel_state_u_b_mps,i]
-        Alpha_rad[i,0] = math.atan(w_over_u)
-        
-    # Angle of side slip
-    Beta_rad = np.zeros((nt_s,1))
-    for i, element in enumerate(t_s):  
-        if True_Airspeed_mps[i,0] == 0:
-            v_over_VT = 0
-        else:
-            v_over_VT = x[sel_state_v_b_mps,i]/True_Airspeed_mps[i,0]
-        Beta_rad[i,0] = math.asin(v_over_VT)
-        
-    # Mach Number
-    Mach = np.zeros((nt_s,1))
-    for i, element in enumerate(t_s):
-        Mach[i,0] = True_Airspeed_mps[i,0]/Cs_mps[i,0]
+    # Air Data Vectorization
+    u_b = x[sel_state_u_b_mps, :]
+    v_b = x[sel_state_v_b_mps, :]
+    w_b = x[sel_state_w_b_mps, :]
+    
+    # True Airspeed
+    True_Airspeed_mps = np.sqrt(u_b**2 + v_b**2 + w_b**2)[:, np.newaxis]
+    
+    # Angle of Attack (handle divide by zero)
+    Alpha_rad = np.zeros_like(u_b)
+    safe_u = u_b != 0
+    Alpha_rad[safe_u] = np.arctan(w_b[safe_u] / u_b[safe_u])
+    Alpha_rad = Alpha_rad[:, np.newaxis]
+    
+    # Angle of Sideslip (handle divide by zero)
+    Beta_rad = np.zeros_like(True_Airspeed_mps).flatten()
+    safe_vt = True_Airspeed_mps.flatten() != 0
+    Beta_rad[safe_vt] = np.arcsin(v_b[safe_vt] / True_Airspeed_mps.flatten()[safe_vt])
+    Beta_rad = Beta_rad[:, np.newaxis]
+    
+    # Atmosphere and Mach
+    altitude_m_arr = x[sel_state_h_m, :]
+    Cs_mps = np.array([fastInterp1(amod["alt_m"], amod["c_mps"], alt) for alt in altitude_m_arr])[:, np.newaxis]
+    Rho_kgpm3 = np.array([fastInterp1(amod["alt_m"], amod["rho_kgpm3"], alt) for alt in altitude_m_arr])[:, np.newaxis]
+    
+    Mach = np.zeros_like(Cs_mps)
+    safe_c = Cs_mps != 0
+    Mach[safe_c] = True_Airspeed_mps[safe_c] / Cs_mps[safe_c]
 
     #==============================================================================
     # Save the data. Use pointers to automatically accommodate updates to 
@@ -209,7 +239,6 @@ def run_job(config_path):
     delr_cmd_deg   = delr_cmd_deg[:, np.newaxis]
     delt_percent   = aux_data_accum[sel_auxillary_data_delt_percent,:]
     delt_percent   = delt_percent[:, np.newaxis]
-    
 
     # 5. Output Management
     if output_cfg:
@@ -257,8 +286,11 @@ def run_job(config_path):
             if show_plots:
                 print("Displaying plots. Close all plot windows to terminate script.")
                 plt.show(block=True)
+            else:
+                # Force close all background figures before moving to comparison
+                plt.close('all')
         
-        if output_cfg.get('compare') is not None: compare_data_to_file(output_cfg.get('compare'), output_cfg.get('save_compare', False))
+        if output_cfg.get('compare') is not None: compare_data_to_file({'name': job_name, 'data': sim_data}, output_cfg.get('compare'), output_cfg.get('save_compare', False))
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py configs/x15_descending_turn.yaml

@@ -12,12 +12,6 @@ def load_simulation_config(yaml_path):
     """
     with open(yaml_path, 'r') as file:
         config = yaml.safe_load(file)
-
-    # Instantiate Vehicle Model Factory
-    if config['vehicle']['model'] == 'X15':
-        vehicle = X15()
-    else:
-        raise ValueError(f"Unknown vehicle model: {config['vehicle']['model']}")
     
     meta_cfg = config.get('meta', {})
     instruction_cfg = config.get('instructions', {})
@@ -25,6 +19,16 @@ def load_simulation_config(yaml_path):
     init_cond_cfg = config.get('initial_conditions', {})
     trim_cfg = config.get('trim', {})
     control_cfg = config.get('control', {})
+    
+    th_path = None
+    if control_cfg.get('type') == 'time_history':
+        th_path = control_cfg.get('input_file')
+
+    # Instantiate Vehicle Model Factory
+    if config['vehicle']['model'] == 'X15':
+        vehicle = X15(time_history_path=th_path)
+    else:
+        raise ValueError(f"Unknown vehicle model: {config['vehicle']['model']}")
     
     h0_m  = init_cond_cfg['h_m'] if init_cond_cfg.get('h_m') is not None else init_cond_cfg['h_ft'] * FT2M
 

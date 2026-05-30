@@ -6,6 +6,7 @@ vehicle:
     model: "X15"
 
 instructions:
+    integrator: "RK45"
     simulate: true
     perform_trim: true
     perform_linearization: false
@@ -24,8 +25,6 @@ output:
         aerodynamics: true
         geodetic: true
         ned_velocity: true
-    compare: "./output_data/X15_Stabilizer_Pulse_FT/data/X15_Stabilizer_Pulse_FT.npz"
-    save_compare: false
 
 initial_conditions:
     Mach: 2.4

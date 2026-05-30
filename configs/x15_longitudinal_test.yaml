@@ -16,7 +16,7 @@ instructions:
 output:
     save_data: true
     save_dir: "./output_data/"
-    show_plots: false
+    show_plots: true
     plots:
         6dof: true
         attitude: true
@@ -24,17 +24,19 @@ output:
         aerodynamics: true
         geodetic: true
         ned_velocity: true
+    compare: "models/X15/test_cases/longitudinal_flight_test_elevator_pulse/X15_Stabilizer_Pulse_FT.npz"
+    save_compare: false
 
 initial_conditions:
     Mach: 3.25
     alpha_deg: -2.0
-    beta_deg: 0.32
-    h_m: 17465.04
+    beta_deg: 0.0
+    h_ft: 57204
     p_rps: 0.0
     q_rps: 0.1
     r_rps: 0.0
     phi_deg: 0.0
-    theta_deg: 0.0
+    theta_deg: 22.65
     psi_deg: 0.0
     dela_ach_deg: 0.0
     dele_ach_deg: 0.0
@@ -45,19 +47,12 @@ initial_conditions:
 
 control:
     type: "time_history"
-    amplitude: 1.0
-    t1_s: 2.0
-    t2_s: 3.0
-    t3_s: 4.0
+    input_file: "models/X15/test_cases/longitudinal_flight_test_elevator_pulse/longitudinal_flight_test_elevator_time_history_Yancey64.csv"
     aileron: false # on if control input should act through it
     elevator: true # on if control input should act through it
     rudder: false  # on if control input should act through it
-    sas: true
+    sas: false
     Kq: 0.0
     Kp: -7.0
     Kyar: 8.0
     Kr: 8.0
-    throttle_percent: 0.0
-    dela_cmd_deg: 0.0
-    dele_cmd_deg: 0.0
-    delr_cmd_deg: 0.0

@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import pandas as pd
 from models.base import Vehicle
 
 from models.X15.aerodynamics.drag_coef_X15 import CD_X15
@@ -14,7 +15,7 @@ from src.utils.constants import FT2M, LB2KG, R2D
 from src.utils.interpolators import fastInterp1, fastInterp2
 
 class X15(Vehicle):
-    def __init__(self, data_path='models/X15/aerodynamic_model/X15_aerodynamic_database.npz'):
+    def __init__(self, data_path='models/X15/aerodynamic_model/X15_aerodynamic_database.npz', time_history_path=None):
         # Load database into memory once
         self.db = np.load(data_path)
         
@@ -27,13 +28,43 @@ class X15(Vehicle):
         self.m_dry_kg = 14700 * LB2KG
         self.m_wet_kg = 33000 * LB2KG
         
-        # Actuation Time Constants
+        # Actuation Time Constants (First-order lag)
         self.tau_a_s = 0.1
         self.tau_e_s = 0.1
         self.tau_r_s = 0.1
         
+        # Actuation Position Limits [min_deg, max_deg]
+        self.lim_a_pos_deg = [-15.0, 15.0]  # Differential tail roll limit
+        self.lim_e_pos_deg = [-35.0, 15.0]  # Pitch limit (usually more trailing-edge up authority)
+        self.lim_r_pos_deg = [-7.5, 7.5]  # Rudder limit
+        
+        # Actuation Rate Limits [deg/s]
+        self.lim_a_rate_dps = 50.0
+        self.lim_e_rate_dps = 50.0
+        self.lim_r_rate_dps = 50.0
+        
+        # --- Time History Data ---
+        self.time_history_s = None
+        self.aileron_time_history_deg = None
+        self.elevator_time_history_deg = None
+        self.rudder_time_history_deg = None
+        
+        if time_history_path is not None:
+            self._load_time_history(time_history_path)
+        
         # Initialize Aerodynamic Derivatives and other tables
         self._init_tables()
+    
+    def _load_time_history(self, path):
+        """
+        Extracts arrays from a dictionary-structured .npy file.
+        Expects keys: 'time', 'elevator', 'aileron', 'rudder'.
+        """
+        time_hist_data            = pd.read_csv(path, header=0)
+        self.time_history_s            = time_hist_data.get('x').values if time_hist_data.get('x') is not None else None
+        self.elevator_time_history_deg = time_hist_data.get('dele_deg_vs_time_s').values if time_hist_data.get('dele_deg_vs_time_s') is not None else None
+        self.aileron_time_history_deg  = time_hist_data.get('dela_deg_vs_time_s').values if time_hist_data.get('dela_deg_vs_time_s') is not None else None
+        self.rudder_time_history_deg   = time_hist_data.get('delr_deg_vs_time_s').values if time_hist_data.get('delr_deg_vs_time_s') is not None else None
 
     def _init_tables(self):
         """Initializes constant aerodynamic derivatives and other tables."""
@@ -133,7 +164,7 @@ class X15(Vehicle):
         
         # --- Roll Moment ---
         Clbeta_prad = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clbeta_pdeg_table_Mach_alpha_deg, alpha_deg, Mach) * R2D
-        Clp_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clp_prps_table_Mach_alpha_deg, alpha_deg, Mach) * 10 # Correction to get damping right
+        Clp_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clp_prps_table_Mach_alpha_deg, alpha_deg, Mach)# * 10 # Correction to get damping right
         Clr_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clr_prps_table_Mach_alpha_deg, alpha_deg, Mach)
         Cldela_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldela_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach) * 0.5 # Correction from WT data
         Cldelr_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldelr_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach)
@@ -209,9 +240,18 @@ class X15(Vehicle):
     def pitch_control(self, t_s, q_b_rps, cmod):
         dele_stick_deg = 0.0
         
-        # Elevator motion due to pilot stick input
-        if cmod["elevator"] and (cmod["t1_s"] <= t_s <= cmod["t3_s"]):
-            dele_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
+        if cmod["elevator"]:
+            # Determine pilot input type
+            input_type = cmod.get("type", "doublet")
+            
+            if input_type == "doublet":
+                # Elevator motion due to pilot stick input
+                if cmod["t1_s"] <= t_s <= cmod["t3_s"]:
+                    dele_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
+            
+            elif input_type == "time_history":
+                if self.time_history_s is not None and self.elevator_time_history_deg is not None:
+                    dele_stick_deg = fastInterp1(self.time_history_s, self.elevator_time_history_deg, t_s)
         
         # SAS feedback applied conditionally
         dele_sas_deg = cmod["Kq"] * q_b_rps if cmod["sas"] else 0.0
@@ -223,9 +263,18 @@ class X15(Vehicle):
     def roll_control(self, t_s, p_b_rps, r_b_rps, cmod):
         dela_stick_deg = 0.0
         
-        # Aileron motion due to pilot stick input
-        if cmod["aileron"] and (cmod["t1_s"] <= t_s <= cmod["t3_s"]):
-            dela_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
+        if cmod["aileron"]:
+            # Determine pilot input type
+            input_type = cmod.get("type", "doublet")
+            
+            if input_type == "doublet":
+                # Aileron motion due to pilot stick input
+                if cmod["t1_s"] <= t_s <= cmod["t3_s"]:
+                    dela_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
+            
+            elif input_type == "time_history":
+                if self.time_history_s is not None and self.aileron_time_history_deg is not None:
+                    dela_stick_deg = fastInterp1(self.time_history_s, self.aileron_time_history_deg, t_s)
         
         # SAS feedback applied conditionally
         dela_sas_deg = (cmod["Kp"] * p_b_rps + cmod["Kyar"] * r_b_rps) if cmod["sas"] else 0.0
@@ -237,10 +286,19 @@ class X15(Vehicle):
     def yaw_control(self, t_s, r_b_rps, cmod):
         delr_pedal_deg = 0.0
         
-        # Rudder motion due to pilot pedal input
-        if cmod["rudder"] and (cmod["t1_s"] <= t_s <= cmod["t3_s"]):
-            delr_pedal_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
+        if cmod["rudder"]:
+            # Determine pilot input type
+            input_type = cmod.get("type", "doublet")
             
+            if input_type == "doublet":
+                # Rudder motion due to pilot pedal input
+                if cmod["t1_s"] <= t_s <= cmod["t3_s"]:
+                    delr_pedal_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
+            
+            elif input_type == "time_history":
+                if self.time_history_s is not None and self.rudder_time_history_deg is not None:
+                    delr_pedal_deg = fastInterp1(self.time_history_s, self.rudder_time_history_deg, t_s)
+        
         # SAS feedback applied conditionally
         delr_sas_deg = cmod["Kr"] * r_b_rps if cmod["sas"] else 0.0
             
