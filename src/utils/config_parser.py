@@ -2,6 +2,8 @@ import math
 
 import yaml
 import ussa1976
+from src.dynamics.eom_wgs84 import eom_wgs84
+from src.dynamics.eom_flat_earth import eom_flat_earth
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
 from src.utils.constants import D2R, FT2M
@@ -37,6 +39,7 @@ def load_simulation_config(yaml_path):
     alt_m = atmosphere["z"].values
     rho_kgpm3 = atmosphere["rho"].values
     c_mps = atmosphere["cs"].values
+    g_mps2    = ussa1976.core.compute_gravity(alt_m)
     c0_mps = fastInterp1(alt_m, c_mps, h0_m)
     
     alpha_rad  = init_cond_cfg.get('alpha_deg') * D2R if init_cond_cfg.get('alpha_deg') is not None else init_cond_cfg.get('alpha_rad', 0.0)
@@ -79,7 +82,8 @@ def load_simulation_config(yaml_path):
     amod = {
         "alt_m": alt_m,
         "rho_kgpm3": rho_kgpm3,
-        "c_mps": c_mps
+        "c_mps": c_mps,
+        "g_mps2" : g_mps2
     }
     
     # State Vector Trim Guess [u, v, w, p, q, r, q0, q1, q2, q3, lat, long, h, dela, dele, delr, m_fuel]
@@ -90,5 +94,19 @@ def load_simulation_config(yaml_path):
         lat0_rad, long0_rad, h0_m,
         dela_ach_deg, dele_ach_deg, delr_ach_deg, m_fuel_kg
     ]
+    
+    # Instantiate EOM
+    eom_type = instruction_cfg.get('eom', 'WGS84')
+    
+    if eom_type == "Flat_Earth":
+        eom = eom_flat_earth(lat0_rad, long0_rad)
+        x0[10] = 0
+        x0[11] = 0
+        x0[12] = -h0_m
+    elif eom_type == "WGS84":
+        eom = eom_wgs84()
+    else:
+        print(f"[EoM type not recognized. Defaulting to WGS84]")
+        eom = eom_wgs84()
 
-    return vehicle, amod, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0
+    return eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0

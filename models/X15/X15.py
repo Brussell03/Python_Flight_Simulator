@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import pandas as pd
-from models.base import Vehicle
+from models.vehicle_base import Vehicle
 
 from models.X15.aerodynamics.drag_coef_X15 import CD_X15
 from models.X15.aerodynamics.lift_coef_X15 import CL_X15
@@ -141,6 +141,15 @@ class X15(Vehicle):
         Jzz_b_kgm2 = fastInterp1(mass_bps, self.Jzz_kgm2_v_mass_kg, m_total_kg)
         Jxz_b_kgm2 = fastInterp1(mass_bps, self.Jxz_kgm2_v_mass_kg, m_total_kg)
         
+        # Jxx_b_slugft2 = 3600
+        # Jxx_b_kgm2 = Jxx_b_slugft2*1.355
+        # Jxz_b_slugft2 = -700
+        # Jxz_b_kgm2 = Jxz_b_slugft2*1.355
+        # Jyy_b_slugft2 = 86000
+        # Jyy_b_kgm2 = Jyy_b_slugft2*1.355
+        # Jzz_b_slugft2 = 88500
+        # Jzz_b_kgm2 = Jzz_b_slugft2*1.355
+        
         return Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxz_b_kgm2
 
     def get_aero_coeffs(self, alpha_deg, Mach, dele_ach_deg):
@@ -153,7 +162,7 @@ class X15(Vehicle):
         CLdele_pdeg = fastInterp2(self.alpha_p_dele_bps_deg, self.Mach_bps, self.CLdele_table_pdeg_v_Mach_AoA_p_dele, alpha_deg + dele_ach_deg, Mach)
         
         # --- Drag ---
-        CDwb = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.CD_table_v_alpha_Mach, alpha_deg, Mach) + 0.06 # Added speed brake increment
+        CDwb = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.CD_table_v_alpha_Mach, alpha_deg, Mach)# + 0.06 # Added speed brake increment
         
         # --- Sideforce ---
         CYbeta_prad = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.CYbeta_table_prad_v_alpha_deg_Mach, alpha_deg, Mach)
@@ -166,7 +175,7 @@ class X15(Vehicle):
         Clbeta_prad = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clbeta_pdeg_table_Mach_alpha_deg, alpha_deg, Mach) * R2D
         Clp_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clp_prps_table_Mach_alpha_deg, alpha_deg, Mach)# * 10 # Correction to get damping right
         Clr_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clr_prps_table_Mach_alpha_deg, alpha_deg, Mach)
-        Cldela_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldela_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach) * 0.5 # Correction from WT data
+        Cldela_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldela_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach)# * 0.5 # Correction from WT data
         Cldelr_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldelr_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach)
         
         # --- Pitch Moment ---
@@ -224,6 +233,9 @@ class X15(Vehicle):
         Fx_b_kgmps2 = -(C_w2b[0,0]*drag_kgmps2 + C_w2b[0,1]*side_kgmps2 + C_w2b[0,2]*lift_kgmps2)
         Fy_b_kgmps2 = -(C_w2b[1,0]*drag_kgmps2 + C_w2b[1,1]*side_kgmps2 + C_w2b[1,2]*lift_kgmps2)
         Fz_b_kgmps2 = -(C_w2b[2,0]*drag_kgmps2 + C_w2b[2,1]*side_kgmps2 + C_w2b[2,2]*lift_kgmps2)
+        # Fx_b_kgmps2 = -C_w2b[0,0]*drag_kgmps2 + C_w2b[0,1]*side_kgmps2 - C_w2b[0,2]*lift_kgmps2
+        # Fy_b_kgmps2 = -C_w2b[1,0]*drag_kgmps2 + C_w2b[1,1]*side_kgmps2 - C_w2b[1,2]*lift_kgmps2
+        # Fz_b_kgmps2 = -C_w2b[2,0]*drag_kgmps2 + C_w2b[2,1]*side_kgmps2 - C_w2b[2,2]*lift_kgmps2
 
         # Dimensional Body-Axis Moments
         l_b_kgm2ps2 = Cl_X15(Clbeta_prad, Clp_prps, Clr_prps, self.Clbetadot_pdps, Cldela_pdeg, Cldelr_pdeg, 
@@ -317,7 +329,7 @@ class X15(Vehicle):
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
         # Extract trim baselines
-        dela_trim_deg, dele_trim_deg, delr_trim_deg = self.get_trim_values(u_trim)
+        dela_trim_deg, dele_trim_deg, delr_trim_deg = 0, 0, 0#self.get_trim_values(u_trim)
         
         # Calculate dynamic commands (Stick + Feedback)
         dela_dynamic_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)
@@ -330,3 +342,32 @@ class X15(Vehicle):
         delr_cmd_deg = delr_trim_deg + delr_dynamic_deg
         
         return dela_cmd_deg, dele_cmd_deg, delr_cmd_deg
+    
+    def actuator_kinematics(self, cmd_deg, ach_deg, tau_s, pos_lims, rate_lim_dps):
+        """
+        Computes actuator state derivative enforcing rate and position saturation.
+        """
+        # 1. Compute unbounded linear rate
+        rate_dps = (cmd_deg - ach_deg) / tau_s
+        
+        # 2. Enforce Rate Saturation (Hydraulic limit)
+        rate_dps = np.clip(rate_dps, -rate_lim_dps, rate_lim_dps)
+        
+        # 3. Enforce Position Saturation (Mechanical hard stops)
+        # If we are at or beyond the max limit and trying to push further, rate is zero
+        if ach_deg >= pos_lims[1] and rate_dps > 0.0:
+            rate_dps = 0.0
+        # If we are at or below the min limit and trying to push further, rate is zero
+        elif ach_deg <= pos_lims[0] and rate_dps < 0.0:
+            rate_dps = 0.0
+            
+        return rate_dps
+    
+    def aileron_kinematics(self, dela_cmd_deg, dela_ach_deg):
+        return self.actuator_kinematics(dela_cmd_deg, dela_ach_deg, self.tau_a_s, self.lim_a_pos_deg, self.lim_a_rate_dps)
+    
+    def elevator_kinematics(self, dele_cmd_deg, dele_ach_deg):
+        return self.actuator_kinematics(dele_cmd_deg, dele_ach_deg, self.tau_e_s, self.lim_e_pos_deg, self.lim_e_rate_dps)
+    
+    def rudder_kinematics(self, delr_cmd_deg, delr_ach_deg):
+        return self.actuator_kinematics(delr_cmd_deg, delr_ach_deg, self.tau_r_s, self.lim_r_pos_deg, self.lim_r_rate_dps)

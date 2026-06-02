@@ -31,28 +31,28 @@ dynamics of the X-15.'''
 
 # Select if plot is made
 CL_vs_alpha_Mach_plot           = 'on'
-Cmalpha_vs_Mach_plot            = 'off'
-Cmq_pdeg_vs_Mach_plot           = 'off'
-Cmdele_vs_Mach_plot             = 'off'
-CLdele_vs_Mach_AoA_p_dele_plot  = 'off'
-Clbeta_vs_Mach_alpha_plot       = 'off'
-CL_vs_alpha_plot                = 'off'
-CD_vs_alpha_plot                = 'off'
-CYbeta_pdeg_vs_Mach_plot        = 'off'
-Cnbeta_pdeg_vs_Mach_plot        = 'off'
-CYdelr_pdeg_vs_Mach_plot        = 'off'
-CYp_prps_vs_Mach_plot           = 'off'
-CYr_prps_vs_Mach_plot           = 'off'
-CYdela_pdeg_vs_Mach_plot        = 'off'
-Clp_vs_Mach_alpha_plot          = 'off'
-Clr_vs_Mach_alpha_plot          = 'off'
-Cldela_pdeg_vs_Mach_plot        = 'off'
-Cldelr_pdeg_vs_Mach_plot        = 'off'
-Cm_vs_alpha_plot                = 'off'
-Cnp_vs_Mach_alpha_plot          = 'off'
-Cnr_vs_Mach_alpha_plot          = 'off'
-Cndela_pdeg_vs_Mach_plot        = 'off'
-Cndelr_pdeg_vs_Mach_plot        = 'off'
+Cmalpha_vs_Mach_plot            = 'on'
+Cmq_pdeg_vs_Mach_plot           = 'on'
+Cmdele_vs_Mach_plot             = 'on'
+CLdele_vs_Mach_AoA_p_dele_plot  = 'on'
+Clbeta_vs_Mach_alpha_plot       = 'on'
+CL_vs_alpha_plot                = 'on'
+CD_vs_alpha_plot                = 'on'
+CYbeta_pdeg_vs_Mach_plot        = 'on'
+Cnbeta_pdeg_vs_Mach_plot        = 'on'
+CYdelr_pdeg_vs_Mach_plot        = 'on'
+CYp_prps_vs_Mach_plot           = 'on'
+CYr_prps_vs_Mach_plot           = 'on'
+CYdela_pdeg_vs_Mach_plot        = 'on'
+Clp_vs_Mach_alpha_plot          = 'on'
+Clr_vs_Mach_alpha_plot          = 'on'
+Cldela_pdeg_vs_Mach_plot        = 'on'
+Cldelr_pdeg_vs_Mach_plot        = 'on'
+Cm_vs_alpha_plot                = 'on'
+Cnp_vs_Mach_alpha_plot          = 'on'
+Cnr_vs_Mach_alpha_plot          = 'on'
+Cndela_pdeg_vs_Mach_plot        = 'on'
+Cndelr_pdeg_vs_Mach_plot        = 'on'
 Jxx_Jxz_vs_Weight_plot          = 'on'
 Jyy_vs_Weight_plot              = 'on'
 Jzz_vs_Weight_plot              = 'on'
@@ -64,10 +64,10 @@ save_database = 'on'
 alpha_bps_deg  = np.arange(-25, 26, 1, dtype=float)
 nalpha_bps_deg = len(alpha_bps_deg)
 
-Mach_bps = np.arange(2, 9, 1, dtype=float)
+Mach_bps = np.arange(2, 8.5, 0.5, dtype=float)
 nMach_bps = len(Mach_bps)
 
-# 1.    Coefficient: Lift, CL = f(alpha_bps_deg, Mach_bps) is a 50 X 7 table
+# 1.    Coefficient: Lift, CL = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Total body, no surface deflections
 #       Source: Walker 1960, page 66. 
@@ -111,17 +111,13 @@ for ii in range(0, nalpha_bps_deg, 1):
 CL_vs_alpha_deg_Mach = np.column_stack((CL_v_alpha_deg_M2, CL_v_alpha_deg_M3, \
     CL_v_alpha_deg_M4, CL_v_alpha_deg_M6, CL_v_alpha_deg_M8))
 
-# Interpolate to the missing Mach 5 and 7 values
-CL_v_alpha_deg_M5 = np.zeros(nalpha_bps_deg)
-CL_v_alpha_deg_M7 = np.zeros(nalpha_bps_deg)
-for ii in range(0,nalpha_bps_deg,1):
-    Mach_presently = np.array([2, 3, 4, 6, 8])
-    CL_v_alpha_deg_M5[ii] = fastInterp2(alpha_bps_deg, Mach_presently, CL_vs_alpha_deg_Mach, alpha_bps_deg[ii], 5)
-    CL_v_alpha_deg_M7[ii] = fastInterp2(alpha_bps_deg, Mach_presently, CL_vs_alpha_deg_Mach, alpha_bps_deg[ii], 7)
+# Interpolate to all specified Mach breakpoints
+CL_table_alpha_deg_Mach = np.zeros((nalpha_bps_deg, nMach_bps))
+Mach_presently = np.array([2, 3, 4, 6, 8], dtype=float)
 
-# Combine data into a single 2D array
-CL_table_alpha_deg_Mach = np.column_stack((CL_v_alpha_deg_M2, CL_v_alpha_deg_M3, \
-    CL_v_alpha_deg_M4, CL_v_alpha_deg_M5, CL_v_alpha_deg_M6, CL_v_alpha_deg_M7, CL_v_alpha_deg_M8))
+for jj in range(nMach_bps):
+    for ii in range(nalpha_bps_deg):
+        CL_table_alpha_deg_Mach[ii, jj] = fastInterp2(alpha_bps_deg, Mach_presently, CL_vs_alpha_deg_Mach, alpha_bps_deg[ii], Mach_bps[jj])
 
 # Compare the results on a single plot
 if CL_vs_alpha_Mach_plot == 'on':
@@ -132,12 +128,12 @@ if CL_vs_alpha_Mach_plot == 'on':
     plt.plot(alpha_sample_deg, CL_vs_alpha_deg_M6, color='red',    linestyle='solid', label="Mach 6 - Extracted")
     plt.plot(alpha_sample_deg, CL_vs_alpha_deg_M8, color='orange', linestyle='solid', label="Mach 8 - Extracted")
     plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,0], color='grey', linestyle='dashed', label="Mach 2 - Interpolated", marker='o', markerfacecolor='none')
-    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,1], color='grey', linestyle='dashed', label="Mach 3 - Interpolated", marker='x')
-    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,2], color='grey', linestyle='dashed', label="Mach 4 - Interpolated", marker='s', markerfacecolor='none')
-    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,3], color='grey', linestyle='dashed', label="Mach 5 - Interpolated", marker='+')
-    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,4], color='grey', linestyle='dashed', label="Mach 6 - Interpolated", marker='D', markerfacecolor='none')
-    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,5], color='grey', linestyle='dashed', label="Mach 7 - Interpolated", marker='*')
-    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,6], color='grey', linestyle='dashed', label="Mach 8 - Interpolated", marker='h', markerfacecolor='none')
+    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,2], color='grey', linestyle='dashed', label="Mach 3 - Interpolated", marker='x')
+    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,4], color='grey', linestyle='dashed', label="Mach 4 - Interpolated", marker='s', markerfacecolor='none')
+    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,6], color='grey', linestyle='dashed', label="Mach 5 - Interpolated", marker='+')
+    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,8], color='grey', linestyle='dashed', label="Mach 6 - Interpolated", marker='D', markerfacecolor='none')
+    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,10], color='grey', linestyle='dashed', label="Mach 7 - Interpolated", marker='*')
+    plt.plot(alpha_bps_deg, CL_table_alpha_deg_Mach[:,12], color='grey', linestyle='dashed', label="Mach 8 - Interpolated", marker='h', markerfacecolor='none')
     plt.xlabel("Angle of Attack [deg]")
     plt.ylabel("CL")
     plt.legend(loc='upper left')
@@ -222,7 +218,7 @@ if CLdele_vs_Mach_AoA_p_dele_plot == 'on':
     plt.tight_layout()
 
 
-# 3.    Coefficient: Cmalpha_pdeg = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 3.    Coefficient: Cmalpha_pdeg = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in pitch moment due to change in angle of attack
 #       Source: Walker 60, report page 75
@@ -292,7 +288,7 @@ if Cmalpha_vs_Mach_plot == 'on':
     plt.tight_layout()
     plt.show()
     
-# 4.    Coefficient: Cmq_pdps = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 4.    Coefficient: Cmq_pdps = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in pitch moment due to change in pitch rate (rate damping)
 #       Source: Walker 60, report page 84
@@ -365,7 +361,7 @@ if Cmq_pdeg_vs_Mach_plot == 'on':
     plt.tight_layout()
     plt.show()
     
-# 5.    Coefficient: Cmdele_pdeg = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 5.    Coefficient: Cmdele_pdeg = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in pitch moment due to change in incidence on elevator (angle of attack + elevator deflection)
 #       Source: Walker 60, report page 77
@@ -435,7 +431,7 @@ if Cmdele_vs_Mach_plot == 'on':
     plt.tight_layout()
     plt.show()
 
-# 6.    Coefficient: Clbeta_pdeg = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 6.    Coefficient: Clbeta_pdeg = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in roll moment due to change in sideslip
 #       Source: Walker 60, report page 92
@@ -1193,7 +1189,7 @@ if CYdela_pdeg_vs_Mach_plot == 'on':
     plt.tight_layout()
     plt.show()
     
-# 14.   Coefficient: Clp_pdeg = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 14.   Coefficient: Clp_pdeg = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in roll moment due to change in roll rate. Negative 
 #                valued indicating that a positive roll rate (rotating right
@@ -1268,7 +1264,7 @@ if Clp_vs_Mach_alpha_plot == 'on':
     plt.tight_layout()
     plt.show()
     
-# 15.   Coefficient: Clr_prps = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 15.   Coefficient: Clr_prps = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in roll moment due to change in yaw rate. The derivative
 #                is negative so that if the aircraft yaws right it will roll left
@@ -1488,7 +1484,7 @@ if Cldelr_pdeg_vs_Mach_plot == 'on':
     plt.tight_layout()
     plt.show()
     
-# 18.   Coefficient: Pitch moment, Cm = f(alpha_bps_deg, Mach_bps) is a 50 X 7 table
+# 18.   Coefficient: Pitch moment, Cm = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Total body, no surface deflections
 #       Source: Walker 1960, page 72. 
@@ -1532,17 +1528,13 @@ for ii in range(0, nalpha_bps_deg, 1):
 Cm_vs_alpha_deg_Mach = np.column_stack((Cm_v_alpha_deg_M2, Cm_v_alpha_deg_M3, \
     Cm_v_alpha_deg_M4, Cm_v_alpha_deg_M6, Cm_v_alpha_deg_M8))
 
-# Interpolate to the missing Mach 5 and 7 values
-Cm_v_alpha_deg_M5 = np.zeros(nalpha_bps_deg)
-Cm_v_alpha_deg_M7 = np.zeros(nalpha_bps_deg)
-for ii in range(0,nalpha_bps_deg,1):
-    Mach_presently = np.array([2, 3, 4, 6, 8])
-    Cm_v_alpha_deg_M5[ii] = fastInterp2(alpha_bps_deg, Mach_presently, Cm_vs_alpha_deg_Mach, alpha_bps_deg[ii], 5)
-    Cm_v_alpha_deg_M7[ii] = fastInterp2(alpha_bps_deg, Mach_presently, Cm_vs_alpha_deg_Mach, alpha_bps_deg[ii], 7)
+# Interpolate to all specified Mach breakpoints
+Cm_table_alpha_deg_Mach = np.zeros((nalpha_bps_deg, nMach_bps))
+Mach_presently = np.array([2, 3, 4, 6, 8], dtype=float)
 
-# Combine data into a single 2D array
-Cm_table_alpha_deg_Mach = np.column_stack((Cm_v_alpha_deg_M2, Cm_v_alpha_deg_M3, \
-    Cm_v_alpha_deg_M4, Cm_v_alpha_deg_M5, Cm_v_alpha_deg_M6, Cm_v_alpha_deg_M7, Cm_v_alpha_deg_M8))
+for jj in range(nMach_bps):
+    for ii in range(nalpha_bps_deg):
+        Cm_table_alpha_deg_Mach[ii, jj] = fastInterp2(alpha_bps_deg, Mach_presently, Cm_vs_alpha_deg_Mach, alpha_bps_deg[ii], Mach_bps[jj])
 
 # Compare the results on a single plot
 if Cm_vs_alpha_plot == 'on':
@@ -1552,13 +1544,13 @@ if Cm_vs_alpha_plot == 'on':
     plt.plot(alpha_sample_deg, Cm_vs_alpha_deg_M4, color='green',  linestyle='solid', label="Mach 4 - Extracted")
     plt.plot(alpha_sample_deg, Cm_vs_alpha_deg_M6, color='red',    linestyle='solid', label="Mach 6 - Extracted")
     plt.plot(alpha_sample_deg, Cm_vs_alpha_deg_M8, color='orange', linestyle='solid', label="Mach 8 - Extracted")
-    plt.plot(alpha_bps_deg, Cm_v_alpha_deg_M2, color='grey', linestyle='dashed', label="Mach 2 - Interpolated", marker='o', markerfacecolor='none')
-    plt.plot(alpha_bps_deg, Cm_v_alpha_deg_M3, color='grey', linestyle='dashed', label="Mach 3 - Interpolated", marker='x')
-    plt.plot(alpha_bps_deg, Cm_v_alpha_deg_M4, color='grey', linestyle='dashed', label="Mach 4 - Interpolated", marker='s', markerfacecolor='none')
-    plt.plot(alpha_bps_deg, Cm_v_alpha_deg_M5, color='grey', linestyle='dashed', label="Mach 5 - Interpolated", marker='+')
-    plt.plot(alpha_bps_deg, Cm_v_alpha_deg_M6, color='grey', linestyle='dashed', label="Mach 6 - Interpolated", marker='D', markerfacecolor='none')
-    plt.plot(alpha_bps_deg, Cm_v_alpha_deg_M7, color='grey', linestyle='dashed', label="Mach 7 - Interpolated", marker='*')
-    plt.plot(alpha_bps_deg, Cm_v_alpha_deg_M8, color='grey', linestyle='dashed', label="Mach 8 - Interpolated", marker='h', markerfacecolor='none')
+    plt.plot(alpha_bps_deg, Cm_table_alpha_deg_Mach[:,0], color='grey', linestyle='dashed', label="Mach 2 - Interpolated", marker='o', markerfacecolor='none')
+    plt.plot(alpha_bps_deg, Cm_table_alpha_deg_Mach[:,2], color='grey', linestyle='dashed', label="Mach 3 - Interpolated", marker='x')
+    plt.plot(alpha_bps_deg, Cm_table_alpha_deg_Mach[:,4], color='grey', linestyle='dashed', label="Mach 4 - Interpolated", marker='s', markerfacecolor='none')
+    plt.plot(alpha_bps_deg, Cm_table_alpha_deg_Mach[:,6], color='grey', linestyle='dashed', label="Mach 5 - Interpolated", marker='+')
+    plt.plot(alpha_bps_deg, Cm_table_alpha_deg_Mach[:,8], color='grey', linestyle='dashed', label="Mach 6 - Interpolated", marker='D', markerfacecolor='none')
+    plt.plot(alpha_bps_deg, Cm_table_alpha_deg_Mach[:,10], color='grey', linestyle='dashed', label="Mach 7 - Interpolated", marker='*')
+    plt.plot(alpha_bps_deg, Cm_table_alpha_deg_Mach[:,12], color='grey', linestyle='dashed', label="Mach 8 - Interpolated", marker='h', markerfacecolor='none')
     plt.xlabel("Angle of Attack [deg]")
     plt.ylabel("Cm")
     plt.legend(loc='upper left')
@@ -1566,7 +1558,7 @@ if Cm_vs_alpha_plot == 'on':
     plt.tight_layout()
     plt.show()
     
-# 19.   Coefficient: Cnp_prps = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 19.   Coefficient: Cnp_prps = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in yaw moment due to change in roll rate. This is roll
 #                damping in yaw. A rolling moment can influence yaw rate and vice
@@ -1638,7 +1630,7 @@ if Cnp_vs_Mach_alpha_plot == 'on':
     plt.tight_layout()
     plt.show()
     
-# 20.   Coefficient: Cnr_prps = f(alpha_bps_deg, Mach_bps) a 50 X 7 array
+# 20.   Coefficient: Cnr_prps = f(alpha_bps_deg, Mach_bps)
 #       Method of determination: Computational
 #       Details: Change in yaw moment due to change in yaw rate. This is
 #                damping in yaw. 
@@ -1861,7 +1853,7 @@ if Cndelr_pdeg_vs_Mach_plot == 'on':
 lb2kg = 0.453592
 slugft2_to_kgm2 = 1.355818
 
-Weight_bps_lb = np.arange(14700, 33000, 50, dtype=float)
+Weight_bps_lb = np.arange(14700, 33200, 200, dtype=float)
 Mass_bps_kg = Weight_bps_lb * lb2kg
 nWeight_bps = len(Weight_bps_lb)
 

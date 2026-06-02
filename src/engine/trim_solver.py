@@ -3,11 +3,10 @@ import numpy as np
 import math
 from scipy.optimize import minimize
 
-from src.dynamics.eom_wgs84 import eom_wgs84
 from src.utils.constants import D2R, R2D, A_WGS84_M, G0_MPS2
 from src.utils.interpolators import fastInterp1
 
-def trim_solver(vehicle, amod, cmod, tmod, x):
+def trim_solver(eom, vehicle, amod, cmod, tmod, x):
     """
     Finds the trimmed flight state by minimizing angular accelerations subject to kinematic constraints.
     """
@@ -18,7 +17,9 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         u, v, w = x_trim[0:3]
         p, q, r = x_trim[3:6]
         phi_rad, theta_rad, psi_rad = x_trim[6:9]
-        rest_of_state = x_trim[9:]
+        rest_of_state = x_trim[9:].copy()
+        if is_flat_earth:
+            rest_of_state[2] = -x_trim[11] # Map positive altitude to NED Z-axis (p3)
 
         # Convert Euler to Quaternion (XYZ/321 sequence)
         cphi, sphi = np.cos(phi_rad/2), np.sin(phi_rad/2)
@@ -37,15 +38,16 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         auxillary_data = np.empty((7,), dtype=float)
         
         # Call the EOM
-        dx, auxillary_data = eom_wgs84(0, x_full, dx, auxillary_data, None, vehicle, amod, cmod)
+        dx, auxillary_data = eom.solve_eom(0, x_full, dx, auxillary_data, None, vehicle, amod, cmod)
         
         if tmod["trim_mode"] == 'steady_glide':
             cost = dx[0]**2 + dx[1]**2 + dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2
         elif tmod["trim_mode"] == 'moment_equilibrium':
             cost = dx[3]**2 + dx[4]**2 + dx[5]**2
         elif tmod["trim_mode"] == 'descending_turn':
-            p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[4], auxillary_data[5], auxillary_data[6]
-            psidot_current = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
+            # p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[4], auxillary_data[5], auxillary_data[6]
+            # psidot_current = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
+            psidot_current = (q * math.sin(phi_rad) + r * math.cos(phi_rad)) / math.cos(theta_rad)
             cost = 0*dx[0]**2 + dx[1]**2 + 0*dx[2]**2 + dx[3]**2 + dx[4]**2 + dx[5]**2 + 1e1*(psidot_current-psidot_target_rps)**2
         else:
             cost = dx[3]**2 + dx[4]**2 + dx[5]**2 # Fallback
@@ -57,6 +59,10 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
             V_T_current_mps = math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2)
             return V_T_current_mps - V_T_target_mps
         
+        def alpha_constraint(x_trim):
+            alpha_current_rad = math.atan(x_trim[2]/x_trim[0])
+            return alpha_current_rad - 0
+        
         def beta_constraint(x_trim):
             V_T_current_mps = math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2)
             beta_current_rad = math.asin(x_trim[1]/V_T_current_mps)
@@ -67,11 +73,12 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         def yaw_rate_constraint(x_trim): return x_trim[5] - r_target_rps
         def roll_constraint(x_trim): return x_trim[6] - phi_target_rad
         def pitch_constraint(x_trim): return x_trim[7] - theta_target_rad
-        def yaw_constraint(x_trim): return x_trim[8] - psi_target_rad
+        def heading_constraint(x_trim): return x_trim[8] - psi_target_rad
         def altitude_constraint(x_trim): return x_trim[11] - h_target_m
         def latitude_constraint(x_trim): return x_trim[9] - lat_target_rad
         def longitude_constraint(x_trim): return x_trim[10] - long_target_rad
-        def fuel_constraint(x_trim): return x_trim[15] - m_fuel_target_kg
+        def position_constraint(x_trim): return x_trim[9] - lat_target_rad + x_trim[10] - long_target_rad + x_trim[11] - h_target_m
+        def mass_constraint(x_trim): return x_trim[15] - m_fuel_target_kg
         
         def flight_path_angle_constraint(x_trim):
             gamma_current_rad = x_trim[7] - math.atan2(x_trim[2], x_trim[0])
@@ -83,19 +90,30 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
             beta_current_rad = math.asin(x_trim[1]/V_T_current_mps)
             gamma_current_rad = x_trim[7] - alpha_current_rad
             
-            # Use unified WGS-84 Gravity Constants
             h_m_current = x_trim[11]
-            s_lat = math.sin(x_trim[9])
-            g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
-            g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
+            
+            if is_flat_earth:
+                g_local = fastInterp1(amod["alt_m"], amod['g_mps2'], h_m_current)
+            else:
+                s_lat = math.sin(x_trim[9])
+                g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
+                g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
             
             G = (psidot_target_rps * V_T_target_mps) / g_local
             a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
             b = math.sin(gamma_current_rad)/math.cos(beta_current_rad)
             c = 1 + G**2*math.cos(beta_current_rad)**2
-            tan_phi_target_rad = G*(math.cos(beta_current_rad)/math.cos(alpha_current_rad))*\
-                ((a-b**2)+b*math.tan(alpha_current_rad)*math.sqrt(c*(1-b**2)+G**2*\
-                math.sin(beta_current_rad)**2))/(a**2-b**2*(1+c*math.tan(alpha_current_rad)**2))
+            
+            # Isolate the term inside the first square root
+            sqrt_term_phi = c*(1 - b**2) + G**2 * math.sin(beta_current_rad)**2
+            
+            # Penalize mathematically impossible states probed by the trim solver
+            if sqrt_term_phi < 0:
+                return 1e10
+                
+            tan_phi_target_rad = G*(math.cos(beta_current_rad)/math.cos(alpha_current_rad)) * \
+                ((a - b**2) + b*math.tan(alpha_current_rad)*math.sqrt(sqrt_term_phi)) / \
+                (a**2 - b**2*(1 + c*math.tan(alpha_current_rad)**2))
             phi_target_rad = math.atan(tan_phi_target_rad)
             
             a = math.cos(alpha_current_rad)*math.cos(beta_current_rad)
@@ -119,17 +137,29 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
             gamma_current_rad = x_trim[7] - alpha_current_rad
             
             h_m_current = x_trim[11] 
-            s_lat = math.sin(x_trim[9])
-            g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
-            g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
+            
+            if is_flat_earth:
+                g_local = fastInterp1(amod["alt_m"], amod['g_mps2'], h_m_current)
+            else:
+                s_lat = math.sin(x_trim[9])
+                g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
+                g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
             
             G = (psidot_target_rps * V_T_target_mps) / g_local
             a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
             b = math.sin(gamma_current_rad)/math.cos(beta_current_rad)
             c = 1 + G**2*math.cos(beta_current_rad)**2
-            tan_phi_target_rad = G*(math.cos(beta_current_rad)/math.cos(alpha_current_rad))*\
-                ((a-b**2)+b*math.tan(alpha_current_rad)*math.sqrt(c*(1-b**2)+G**2*\
-                math.sin(beta_current_rad)**2))/(a**2-b**2*(1+c*math.tan(alpha_current_rad)**2))
+            
+            # Isolate the term inside the first square root
+            sqrt_term_phi = c*(1 - b**2) + G**2 * math.sin(beta_current_rad)**2
+            
+            # Penalize mathematically impossible states probed by the trim solver
+            if sqrt_term_phi < 0:
+                return 1e10
+                
+            tan_phi_target_rad = G*(math.cos(beta_current_rad)/math.cos(alpha_current_rad)) * \
+                ((a - b**2) + b*math.tan(alpha_current_rad)*math.sqrt(sqrt_term_phi)) / \
+                (a**2 - b**2*(1 + c*math.tan(alpha_current_rad)**2))
             phi_target_rad = math.atan(tan_phi_target_rad)
             return x_trim[6] - phi_target_rad
 
@@ -140,12 +170,12 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
                 {'type': 'eq', 'fun': roll_rate_constraint},
                 {'type': 'eq', 'fun': pitch_rate_constraint},
                 {'type': 'eq', 'fun': yaw_rate_constraint},
-                {'type': 'eq', 'fun': altitude_constraint},
-                {'type': 'eq', 'fun': latitude_constraint},
-                {'type': 'eq', 'fun': longitude_constraint},
+                # {'type': 'eq', 'fun': altitude_constraint},
+                # {'type': 'eq', 'fun': latitude_constraint},
+                # {'type': 'eq', 'fun': longitude_constraint},
                 {'type': 'eq', 'fun': roll_constraint},
-                {'type': 'eq', 'fun': yaw_constraint},
-                {'type': 'eq', 'fun': fuel_constraint}
+                {'type': 'eq', 'fun': heading_constraint},
+                # {'type': 'eq', 'fun': mass_constraint}
             ]
         elif tmod["trim_mode"] == 'moment_equilibrium':
             return [
@@ -154,29 +184,31 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
                 {'type': 'eq', 'fun': roll_rate_constraint},
                 {'type': 'eq', 'fun': pitch_rate_constraint},
                 {'type': 'eq', 'fun': yaw_rate_constraint},
-                {'type': 'eq', 'fun': altitude_constraint},
-                {'type': 'eq', 'fun': flight_path_angle_constraint},
-                {'type': 'eq', 'fun': latitude_constraint},
-                {'type': 'eq', 'fun': longitude_constraint},
+                # {'type': 'eq', 'fun': altitude_constraint},
                 {'type': 'eq', 'fun': roll_constraint},
-                {'type': 'eq', 'fun': yaw_constraint},
-                {'type': 'eq', 'fun': fuel_constraint}
+                {'type': 'eq', 'fun': flight_path_angle_constraint},
+                # {'type': 'eq', 'fun': latitude_constraint},
+                # {'type': 'eq', 'fun': longitude_constraint},
+                {'type': 'eq', 'fun': heading_constraint},
+                # {'type': 'eq', 'fun': mass_constraint}
             ]
         elif tmod["trim_mode"] == 'descending_turn':
             return [
                 {'type': 'eq', 'fun': velocity_constraint},
-                {'type': 'eq', 'fun': altitude_constraint},
+                # {'type': 'eq', 'fun': altitude_constraint},
                 {'type': 'eq', 'fun': theta_rate_of_climb_constraint},
                 {'type': 'eq', 'fun': phi_turn_coord_constraint},
                 {'type': 'eq', 'fun': roll_rate_constraint},
-                {'type': 'eq', 'fun': latitude_constraint},
-                {'type': 'eq', 'fun': longitude_constraint},
-                {'type': 'eq', 'fun': yaw_constraint},
-                {'type': 'eq', 'fun': fuel_constraint}
+                # {'type': 'eq', 'fun': latitude_constraint},
+                # {'type': 'eq', 'fun': longitude_constraint},
+                {'type': 'eq', 'fun': heading_constraint},
+                # {'type': 'eq', 'fun': mass_constraint}
             ]
     
     # 3. Setup and Execution
     print("--- Unpowered Trim Solver ---")
+    
+    is_flat_earth = type(eom).__name__ == "eom_flat_earth"
     
     cmod['trim_flag'] = cmod.get('trim_flag', False) # Defaults to off if missing
     cmod['linearization_flag'] = cmod.get('linearization_flag', False)
@@ -196,10 +228,12 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         v_over_VT = x[1]/V_T_curr_mps
     beta_curr_rad = math.asin(v_over_VT)
     
-    Cs_mps = fastInterp1(amod["alt_m"], amod["c_mps"], x[12])
+    h_initial_m = -x[12] if is_flat_earth else x[12]
+    h_target_m = tmod.get('h_m', h_initial_m)
+    
+    Cs_mps = fastInterp1(amod["alt_m"], amod["c_mps"], h_initial_m)
     Mach_curr = V_T_curr_mps/Cs_mps
     
-    h_target_m = tmod.get('h_m', x[12])
     c_snd = fastInterp1(amod['alt_m'], amod['c_mps'], h_target_m)
     V_T_target_mps = tmod.get('Mach', Mach_curr) * c_snd
     
@@ -218,7 +252,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     
     u_target_b_mps   = c_alpha * c_beta * V_T_target_mps
     v_target_b_mps   = s_beta * V_T_target_mps
-    b_target_b_mps   = s_alpha * c_beta * V_T_target_mps
+    w_target_b_mps   = s_alpha * c_beta * V_T_target_mps
     p_target_rps     = tmod['p_rps'] if tmod.get('p_rps') is not None else x[3]
     q_target_rps     = tmod['q_rps'] if tmod.get('q_rps') is not None else x[4]
     r_target_rps     = tmod['r_rps'] if tmod.get('r_rps') is not None else x[5]
@@ -236,7 +270,7 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     x_guess = np.zeros(16)
     x_guess[0]  = u_target_b_mps
     x_guess[1]  = v_target_b_mps
-    x_guess[2]  = b_target_b_mps
+    x_guess[2]  = w_target_b_mps
     x_guess[3]  = p_target_rps
     x_guess[4]  = q_target_rps
     x_guess[5]  = r_target_rps
@@ -255,13 +289,14 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
 
     bounds = [(-np.inf, np.inf)] * 16
     bounds[7]  = (-math.pi/3, math.pi/3)
-    bounds[9]  = (-math.pi/2, math.pi/2)
-    bounds[10] = (-math.pi, math.pi)
-    bounds[11] = (0, np.inf)
-    bounds[12] = (-math.pi/4*R2D, math.pi/4*R2D)
-    bounds[13] = (-math.pi/4*R2D, math.pi/4*R2D)
-    bounds[14] = (-math.pi/4*R2D, math.pi/4*R2D)
-    bounds[15] = (0, vehicle.m_wet_kg - vehicle.m_dry_kg) # Dynamically accessed from vehicle object
+    bounds[12] = (-15, 15)
+    bounds[13] = (-35, 15)
+    bounds[14] = (-7.5, 7.5)
+    
+    bounds[9]  = (lat_target_rad, lat_target_rad)      # Lock Latitude
+    bounds[10] = (long_target_rad, long_target_rad)    # Lock Longitude
+    bounds[11] = (h_target_m, h_target_m)              # Lock Altitude
+    bounds[15] = (m_fuel_target_kg, m_fuel_target_kg)  # Lock Mass
     
     cmod["trim_flag"] = True
 
@@ -296,8 +331,12 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
     dx = np.empty((17,), dtype=float)
     auxillary_data = np.empty((7,), dtype=float)
     
-    x_trim_full = np.concatenate((x_trim[0:6], [q0, q1, q2, q3], x_trim[9:]))
-    dx, auxillary_data = eom_wgs84(0, x_trim_full, dx, auxillary_data, None, vehicle, amod, cmod)
+    rest_of_state_full = x_trim[9:].copy()
+    if is_flat_earth:
+        rest_of_state_full[2] = -x_trim[11]
+
+    x_trim_full = np.concatenate((x_trim[0:6], [q0, q1, q2, q3], rest_of_state_full))
+    dx, auxillary_data = eom.solve_eom(0, x_trim_full, dx, auxillary_data, None, vehicle, amod, cmod)
 
     if result.success:
         
@@ -319,9 +358,9 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         print(f"phi_deg:   {phi_rad*R2D:.8f}")
         print(f"theta_deg: {theta_rad*R2D:.8f}")
         print(f"psi_deg:   {psi_rad*R2D:.8f}")
-        print(f"lat_deg:   {x_trim[9]*R2D:.8f}")
-        print(f"long_deg:  {x_trim[10]*R2D:.8f}")
-        print(f"alt_m:     {x_trim[11]:.8f}")
+        print(f"p1_n_m:    {x_trim[9]:.8f}"     if is_flat_earth else f"lat_deg:   {x_trim[9]*R2D:.8f}")
+        print(f"p2_n_m:    {x_trim[10]:.8f}"    if is_flat_earth else f"long_deg:  {x_trim[10]*R2D:.8f}")
+        print(f"p3_n_m:    {-x_trim[11]:.8f}"   if is_flat_earth else f"alt_m:     {x_trim[11]:.8f}")
         print(f"dela_deg:  {x_trim[12]:.8f}")
         print(f"dele_deg:  {x_trim[13]:.8f}")
         print(f"delr_deg:  {x_trim[14]:.8f}")
@@ -336,9 +375,9 @@ def trim_solver(vehicle, amod, cmod, tmod, x):
         print(f"phi_rad-dot:      {phi_rad_dot: .8f}")
         print(f"theta_rad-dot:    {theta_rad_dot: .8f}")
         print(f"psi_rad-dot:      {psi_rad_dot: .8f}")
-        print(f"lat_deg-dot:      {dx[10]*R2D: .8f}")
-        print(f"long_deg-dot:     {dx[11]*R2D: .8f}")
-        print(f"alt_m-dot:        {dx[12]: .8f}")
+        print(f"p1_n_m-dot:       {dx[10]: .8f}"       if is_flat_earth else f"lat_deg-dot:      {dx[10]*R2D: .8f}")
+        print(f"p2_n_m-dot:       {dx[11]: .8f}"       if is_flat_earth else f"long_deg-dot:     {dx[11]*R2D: .8f}")
+        print(f"p3_n_m-dot:       {dx[12]: .8f}"       if is_flat_earth else f"alt_m-dot:        {dx[12]: .8f}")
         print(f"dela_ach_deg-dot: {dx[13]: .8f}")
         print(f"dele_ach_deg-dot: {dx[14]: .8f}")
         print(f"delr_ach_deg-dot: {dx[15]: .8f}")
