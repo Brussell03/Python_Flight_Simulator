@@ -36,7 +36,7 @@ class X15(Vehicle):
         # Actuation Position Limits [min_deg, max_deg]
         self.lim_a_pos_deg = [-15.0, 15.0]  # Differential tail roll limit
         self.lim_e_pos_deg = [-35.0, 15.0]  # Pitch limit (usually more trailing-edge up authority)
-        self.lim_r_pos_deg = [-7.5, 7.5]  # Rudder limit
+        self.lim_r_pos_deg = [-7.5, 7.5]    # Rudder limit
         
         # Actuation Rate Limits [deg/s]
         self.lim_a_rate_dps = 50.0
@@ -152,7 +152,7 @@ class X15(Vehicle):
         
         return Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxz_b_kgm2
 
-    def get_aero_coeffs(self, alpha_deg, Mach, dele_ach_deg):
+    def get_aero_coeffs(self, alpha_deg, Mach, dele_ach_deg, speedbrake):
         """
         Calculates all non-dimensional aerodynamic coefficients for the current state.
         """
@@ -162,7 +162,8 @@ class X15(Vehicle):
         CLdele_pdeg = fastInterp2(self.alpha_p_dele_bps_deg, self.Mach_bps, self.CLdele_table_pdeg_v_Mach_AoA_p_dele, alpha_deg + dele_ach_deg, Mach)
         
         # --- Drag ---
-        CDwb = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.CD_table_v_alpha_Mach, alpha_deg, Mach)# + 0.06 # Added speed brake increment
+        CDwb = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.CD_table_v_alpha_Mach, alpha_deg, Mach)
+        if speedbrake: CDwb += 0.06 # Added speed brake increment
         
         # --- Sideforce ---
         CYbeta_prad = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.CYbeta_table_prad_v_alpha_deg_Mach, alpha_deg, Mach)
@@ -172,16 +173,16 @@ class X15(Vehicle):
         CYr_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.CYr_table_prps_v_alpha_deg_Mach, alpha_deg, Mach)
         
         # --- Roll Moment ---
-        Clbeta_prad = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clbeta_pdeg_table_Mach_alpha_deg, alpha_deg, Mach) * R2D
-        Clp_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clp_prps_table_Mach_alpha_deg, alpha_deg, Mach)# * 10 # Correction to get damping right
+        Clbeta_prad = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clbeta_pdeg_table_Mach_alpha_deg, alpha_deg, Mach)# * R2D
+        Clp_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clp_prps_table_Mach_alpha_deg, alpha_deg, Mach) * 10 # Correction to get damping right
         Clr_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Clr_prps_table_Mach_alpha_deg, alpha_deg, Mach)
-        Cldela_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldela_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach)# * 0.5 # Correction from WT data
+        Cldela_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldela_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach) * 0.5 # Correction from WT data
         Cldelr_pdeg = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cldelr_table_pdeg_v_alpha_deg_Mach, alpha_deg, Mach)
         
         # --- Pitch Moment ---
         Cm = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cm_table_alpha_deg_Mach, alpha_deg, Mach)
         Cmdele_pdeg = fastInterp2(self.alpha_p_dele_bps_deg, self.Mach_bps, self.Cmdele_pdeg_table_AoApdele_deg_Mach, alpha_deg + dele_ach_deg, Mach)
-        Cmq_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cmq_pdps_table_alpha_deg_Mach, alpha_deg, Mach) * R2D
+        Cmq_prps = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cmq_pdps_table_alpha_deg_Mach, alpha_deg, Mach)# * R2D
         
         # --- Yaw Moment ---
         Cnbeta_prad = fastInterp2(self.alpha_bps_deg, self.Mach_bps, self.Cnbeta_table_prad_v_alpha_deg_Mach, alpha_deg, Mach)
@@ -202,7 +203,7 @@ class X15(Vehicle):
 
     def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
                                p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b):
+                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake):
         """
         Calculates full dimensional aerodynamic forces and moments mapped to the body frame.
         Applies engine jet damping and wind-to-body transformations natively.
@@ -217,7 +218,7 @@ class X15(Vehicle):
         (CLwb, CLdele_pdeg, CDwb, Cm, Cmdele_pdeg, Cmq_prps,
          CYbeta_prad, CYdelr_pdeg, CYdela_pdeg, CYp_prps, CYr_prps,
          Clbeta_prad, Clp_prps, Clr_prps, Cldela_pdeg, Cldelr_pdeg,
-         Cnbeta_prad, Cnp_prps, Cnr_prps, Cndela_pdeg, Cndelr_pdeg) = self.get_aero_coeffs(alpha_deg, Mach, dele_ach_deg)
+         Cnbeta_prad, Cnp_prps, Cnr_prps, Cndela_pdeg, Cndelr_pdeg) = self.get_aero_coeffs(alpha_deg, Mach, dele_ach_deg, speedbrake)
 
         # Apply XLR99 Jet Damping Correction directly to dimensionless terms 
         Cmq_prps += -0.05 * throttle_perc
@@ -230,12 +231,9 @@ class X15(Vehicle):
                              beta_rad, p_b_rps, r_b_rps, betadot_rps, dela_ach_deg, delr_ach_deg, true_airspeed_mps, self.b_m) * qbar_kgpms2 * self.A_ref_m2
         
         # Transform Forces to Body Frame using provided C_w2b DCM
-        Fx_b_kgmps2 = -(C_w2b[0,0]*drag_kgmps2 + C_w2b[0,1]*side_kgmps2 + C_w2b[0,2]*lift_kgmps2)
-        Fy_b_kgmps2 = -(C_w2b[1,0]*drag_kgmps2 + C_w2b[1,1]*side_kgmps2 + C_w2b[1,2]*lift_kgmps2)
-        Fz_b_kgmps2 = -(C_w2b[2,0]*drag_kgmps2 + C_w2b[2,1]*side_kgmps2 + C_w2b[2,2]*lift_kgmps2)
-        # Fx_b_kgmps2 = -C_w2b[0,0]*drag_kgmps2 + C_w2b[0,1]*side_kgmps2 - C_w2b[0,2]*lift_kgmps2
-        # Fy_b_kgmps2 = -C_w2b[1,0]*drag_kgmps2 + C_w2b[1,1]*side_kgmps2 - C_w2b[1,2]*lift_kgmps2
-        # Fz_b_kgmps2 = -C_w2b[2,0]*drag_kgmps2 + C_w2b[2,1]*side_kgmps2 - C_w2b[2,2]*lift_kgmps2
+        Fx_b_kgmps2 = -C_w2b[0,0]*drag_kgmps2 + C_w2b[0,1]*side_kgmps2 - C_w2b[0,2]*lift_kgmps2
+        Fy_b_kgmps2 = -C_w2b[1,0]*drag_kgmps2 + C_w2b[1,1]*side_kgmps2 - C_w2b[1,2]*lift_kgmps2
+        Fz_b_kgmps2 = -C_w2b[2,0]*drag_kgmps2 + C_w2b[2,1]*side_kgmps2 - C_w2b[2,2]*lift_kgmps2
 
         # Dimensional Body-Axis Moments
         l_b_kgm2ps2 = Cl_X15(Clbeta_prad, Clp_prps, Clr_prps, self.Clbetadot_pdps, Cldela_pdeg, Cldelr_pdeg, 
@@ -313,7 +311,7 @@ class X15(Vehicle):
         
         # SAS feedback applied conditionally
         delr_sas_deg = cmod["Kr"] * r_b_rps if cmod["sas"] else 0.0
-            
+        
         return delr_sas_deg + delr_pedal_deg
 
     def get_trim_values(self, trim_list):
@@ -329,7 +327,7 @@ class X15(Vehicle):
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
         # Extract trim baselines
-        dela_trim_deg, dele_trim_deg, delr_trim_deg = 0, 0, 0#self.get_trim_values(u_trim)
+        dela_trim_deg, dele_trim_deg, delr_trim_deg = self.get_trim_values(u_trim)
         
         # Calculate dynamic commands (Stick + Feedback)
         dela_dynamic_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)
@@ -343,12 +341,16 @@ class X15(Vehicle):
         
         return dela_cmd_deg, dele_cmd_deg, delr_cmd_deg
     
-    def actuator_kinematics(self, cmd_deg, ach_deg, tau_s, pos_lims, rate_lim_dps):
+    def actuator_kinematics(self, cmd_deg, ach_deg, tau_s, pos_lims, rate_lim_dps, dt=None):
         """
         Computes actuator state derivative enforcing rate and position saturation.
         """
         # 1. Compute unbounded linear rate
-        rate_dps = (cmd_deg - ach_deg) / tau_s
+        if dt is not None and dt > 0:
+            rate_dps = (cmd_deg - ach_deg) / dt
+        else:
+            # Fallback to standard tau if dt is missing
+            rate_dps = (cmd_deg - ach_deg) / tau_s
         
         # 2. Enforce Rate Saturation (Hydraulic limit)
         rate_dps = np.clip(rate_dps, -rate_lim_dps, rate_lim_dps)

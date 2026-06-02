@@ -6,16 +6,18 @@ vehicle:
     model: "X15"
 
 instructions:
+    eom: "WGS84"
+    integrator: "RK45"
     simulate: true
     perform_trim: false
     perform_linearization: false
+    compare: true
     t0_s: 0.0
     tf_s: 5.5
     dt_s: 0.012
 
 output:
     save_data: true
-    save_dir: "./output_data/"
     show_plots: false
     plots:
         6dof: true
@@ -24,6 +26,11 @@ output:
         aerodynamics: true
         geodetic: true
         ned_velocity: true
+
+compare:
+    path: "comparison_data/X15_Rudder_Pulse_FT.npz"
+    save_compare: true
+    show_plots: true
 
 initial_conditions:
     Mach: 3.42
@@ -45,19 +52,12 @@ initial_conditions:
 
 control:
     type: "time_history"
-    amplitude: 1.0
-    t1_s: 2.0
-    t2_s: 3.0
-    t3_s: 4.0
+    input_file: "comparison_data/.csv"
     aileron: true   # on if control input should act through it
     elevator: false # on if control input should act through it
     rudder: true    # on if control input should act through it
     sas: true
-    Kq: 8.0
-    Kp: 0.0 # -8.0
-    Kyar: 0.0 # 8.0
-    Kr: 0.0 # 6.0
-    throttle_percent: 0.0
-    dela_cmd_deg: 0.0
-    dele_cmd_deg: 0.0
-    delr_cmd_deg: 0.0
+    Kq: 8
+    Kp: 0
+    Kyar: 0
+    Kr: 0

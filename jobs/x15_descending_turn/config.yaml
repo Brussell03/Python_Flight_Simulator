@@ -1,23 +1,23 @@
 meta:
-    job_name: "X15_Descending_Turn_Flat_Earth"
-    description: "X-15 Mach 2.4 Descending Turn with Trim and Linearization"
+    job_name: "X15_Descending_Turn"
+    description: "X-15 Mach 2.4 Descending Turn with Trim"
 
 vehicle:
     model: "X15"
 
 instructions:
-    eom: "Flat_Earth"
+    eom: "WGS84"
     integrator: "RK45"
     simulate: true
     perform_trim: true
     perform_linearization: false
+    compare: false
     t0_s: 0.0
     tf_s: 10.0
     dt_s: 0.005
 
 output:
     save_data: true
-    save_dir: "./output_data/"
     show_plots: false
     plots:
         6dof: true
@@ -41,24 +41,6 @@ initial_conditions:
     lat_deg: 37.3
     long_deg: -115.8
     m_fuel_kg: 0.0
-
-# initial_conditions:
-#     Mach: 2.4
-#     alpha_deg: 0.667
-#     beta_deg: 0.4535
-#     h_m: 16500.0
-#     p_dps: 0.0
-#     q_dps: 1.814
-#     r_dps: 0.7648
-#     phi_deg: 68.362
-#     theta_deg: -10.3002
-#     psi_deg: 0.0
-#     dela_ach_deg: -0.432
-#     dele_ach_deg: -3.52988
-#     delr_ach_deg: 0.648
-#     lat_deg: 37.3
-#     long_deg: -115.8
-#     m_fuel_kg: 0.0
 
 trim:
     trim_mode: "descending_turn"
@@ -93,6 +75,4 @@ control:
     Kyar: 8.0
     Kr: 8.0
     throttle_percent: 0.0
-    dela_cmd_deg: 0.0
-    dele_cmd_deg: 0.0
-    delr_cmd_deg: 0.0
+    speedbrake: False

@@ -6,17 +6,19 @@ vehicle:
     model: "X15"
 
 instructions:
+    eom: "WGS84"
+    integrator: "RK45"
     simulate: true
     perform_trim: false
     perform_linearization: false
+    compare: true
     t0_s: 0.0
     tf_s: 7.0
     dt_s: 0.012
 
 output:
     save_data: true
-    save_dir: "./output_data/"
-    show_plots: true
+    show_plots: false
     plots:
         6dof: true
         attitude: true
@@ -24,14 +26,17 @@ output:
         aerodynamics: true
         geodetic: true
         ned_velocity: true
-    compare: "models/X15/test_cases/longitudinal_flight_test_elevator_pulse/X15_Stabilizer_Pulse_FT.npz"
-    save_compare: false
+
+compare:
+    path: "comparison_data/X15_Stabilizer_Pulse_FT.npz"
+    save_compare: true
+    show_plots: true
 
 initial_conditions:
     Mach: 3.25
     alpha_deg: -2.0
     beta_deg: 0.0
-    h_ft: 57204
+    h_ft: 57300
     p_rps: 0.0
     q_rps: 0.1
     r_rps: 0.0
@@ -47,11 +52,11 @@ initial_conditions:
 
 control:
     type: "time_history"
-    input_file: "models/X15/test_cases/longitudinal_flight_test_elevator_pulse/longitudinal_flight_test_elevator_time_history_Yancey64.csv"
+    input_file: "comparison_data/longitudinal_flight_test_elevator_time_history_Yancey64.csv"
     aileron: false # on if control input should act through it
     elevator: true # on if control input should act through it
     rudder: false  # on if control input should act through it
-    sas: false
+    sas: true
     Kq: 0.0
     Kp: -7.0
     Kyar: 8.0

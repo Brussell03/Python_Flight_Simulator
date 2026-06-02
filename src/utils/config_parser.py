@@ -1,30 +1,43 @@
 import math
-
+import os
 import yaml
 import ussa1976
+
 from src.dynamics.eom_wgs84 import eom_wgs84
 from src.dynamics.eom_flat_earth import eom_flat_earth
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
 from src.utils.constants import D2R, FT2M
 
+def resolve_path(base_dir, path):
+    # Join only if path is relative
+    if path and not os.path.isabs(path):
+        return os.path.join(base_dir, path)
+    return path
+
 def load_simulation_config(yaml_path):
     """
     Parses the YAML config and returns the required simulation objects.
     """
+    # Establish base directory from the YAML file location
+    base_dir = os.path.dirname(os.path.abspath(yaml_path))
+    
     with open(yaml_path, 'r') as file:
         config = yaml.safe_load(file)
     
     meta_cfg = config.get('meta', {})
     instruction_cfg = config.get('instructions', {})
     output_cfg = config.get('output', {})
+    compare_cfg = config.get('compare', {})
     init_cond_cfg = config.get('initial_conditions', {})
     trim_cfg = config.get('trim', {})
     control_cfg = config.get('control', {})
     
+    # Resolve Path for Control Input
     th_path = None
     if control_cfg.get('type') == 'time_history':
-        th_path = control_cfg.get('input_file')
+        raw_path = control_cfg.get('input_file')
+        th_path = resolve_path(base_dir, raw_path)
 
     # Instantiate Vehicle Model Factory
     if config['vehicle']['model'] == 'X15':
@@ -109,4 +122,4 @@ def load_simulation_config(yaml_path):
         print(f"[EoM type not recognized. Defaulting to WGS84]")
         eom = eom_wgs84()
 
-    return eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0
+    return eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir

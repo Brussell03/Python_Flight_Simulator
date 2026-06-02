@@ -17,17 +17,12 @@ class eom_wgs84(eom):
         lat_rad, long_rad, h_m = x[10], x[11], x[12]
         dela_ach_deg, dele_ach_deg, delr_ach_deg = x[13], x[14], x[15]
         m_fuel_kg = x[16]
-        
-        # # Quaternion Normalization Guard
-        # q_norm = math.sqrt(q0**2 + q1**2 + q2**2 + q3**2)
-        # if q_norm > 0:
-        #     q0, q1, q2, q3 = q0/q_norm, q1/q_norm, q2/q_norm, q3/q_norm
-        # else:
-        #     q0, q1, q2, q3 = 1.0, 0.0, 0.0, 0.0 # Fallback for catastrophic failure
 
         # Vehicle Mass State Interface
         m_total_kg = vehicle.m_dry_kg + m_fuel_kg
         Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxz_b_kgm2 = vehicle.get_mass_properties(m_total_kg)
+        
+        speedbrake = cmod.get("speedbrake", False)
 
         # Control Routing
         delsb_deg = open_loop_speed_brake()
@@ -36,7 +31,8 @@ class eom_wgs84(eom):
         # Engine Interface
         m_fuel_dot_kgps = vehicle.get_engine_burn_rate(throttle_perc)
         
-        # # Trim & Linearization Overrides
+        # Trim & Linearization Overrides
+        dela_ach_deg_old, dele_ach_deg_old, delr_ach_deg_old = dela_ach_deg, dele_ach_deg, delr_ach_deg
         if cmod.get("trim_flag"):
             # Surfaces fixed
             dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = dela_ach_deg, dele_ach_deg, delr_ach_deg
@@ -46,6 +42,10 @@ class eom_wgs84(eom):
         else:
             # Require the vehicle or SAS object to return control deflections
             dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = vehicle.get_sas_commands(t, x, cmod, u_trim)
+        
+        if cmod.get("type") == "time_history":
+            dela_ach_deg, dele_ach_deg, delr_ach_deg = dela_cmd_deg, dele_cmd_deg, delr_cmd_deg
+            x[13], x[14], x[15] = dela_ach_deg, dele_ach_deg, delr_ach_deg
 
         # Atmosphere & Air Data
         rho_kgpm3 = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], h_m)
@@ -93,7 +93,7 @@ class eom_wgs84(eom):
         # Vehicle returns mapped body forces
         Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2 = vehicle.get_forces_and_moments(alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
                                                                                                                     p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                                                                                                                    delr_ach_deg, delsb_deg, throttle_perc, C_w2b)
+                                                                                                                    delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake)
 
         # Velocity Equations (Coriolis)
         omega_cor_b_rps = np.array([p_b_rps, q_b_rps, r_b_rps]) + 2.0 * omega_ie_b_rps
@@ -170,9 +170,9 @@ class eom_wgs84(eom):
         dx[12] = -w_n_mps
 
         # Actuation & Fuel
-        dx[13] = vehicle.aileron_kinematics(dela_cmd_deg, dela_ach_deg)
-        dx[14] = vehicle.elevator_kinematics(dele_cmd_deg, dele_ach_deg)
-        dx[15] = vehicle.rudder_kinematics(delr_cmd_deg, delr_ach_deg)
+        dx[13] = vehicle.aileron_kinematics(dela_cmd_deg, dela_ach_deg_old)
+        dx[14] = vehicle.elevator_kinematics(dele_cmd_deg, dele_ach_deg_old)
+        dx[15] = vehicle.rudder_kinematics(delr_cmd_deg, delr_ach_deg_old)
         dx[16] = -m_fuel_dot_kgps
 
         # Aux Data

@@ -6,16 +6,18 @@ vehicle:
     model: "X15"
 
 instructions:
+    eom: "WGS84"
+    integrator: "RK45"
     simulate: true
     perform_trim: false
     perform_linearization: false
+    compare: false
     t0_s: 0.0
     tf_s: 25.0
     dt_s: 0.012
 
 output:
     save_data: true
-    save_dir: "./output_data/"
     show_plots: false
     plots:
         6dof: true
@@ -55,6 +57,3 @@ control:
     Kyar: 8.0
     Kr: 0.0 # 8.0
     throttle_percent: 0.0
-    dela_cmd_deg: 0.0
-    dele_cmd_deg: 0.0
-    delr_cmd_deg: 0.0

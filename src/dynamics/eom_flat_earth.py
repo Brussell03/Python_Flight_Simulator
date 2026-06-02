@@ -20,17 +20,12 @@ class eom_flat_earth(eom):
         p1_n_m, p2_n_m, p3_n_m = x[10], x[11], x[12]
         dela_ach_deg, dele_ach_deg, delr_ach_deg = x[13], x[14], x[15]
         m_fuel_kg = x[16]
-        
-        # # Quaternion Normalization Guard
-        # q_norm = math.sqrt(q0**2 + q1**2 + q2**2 + q3**2)
-        # if q_norm > 0:
-        #     q0, q1, q2, q3 = q0/q_norm, q1/q_norm, q2/q_norm, q3/q_norm
-        # else:
-        #     q0, q1, q2, q3 = 1.0, 0.0, 0.0, 0.0 # Fallback for catastrophic failure
 
         # Vehicle Mass State Interface
         m_total_kg = vehicle.m_dry_kg + m_fuel_kg
         Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxz_b_kgm2 = vehicle.get_mass_properties(m_total_kg)
+        
+        speedbrake = cmod.get("speedbrake", False)
 
         # Control Routing
         delsb_deg = open_loop_speed_brake()
@@ -49,6 +44,10 @@ class eom_flat_earth(eom):
         else:
             # Require the vehicle or SAS object to return control deflections
             dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = vehicle.get_sas_commands(t, x, cmod, u_trim)
+        
+        if cmod.get("type") == "time_history":
+            dela_ach_deg, dele_ach_deg, delr_ach_deg = dela_cmd_deg, dele_cmd_deg, delr_cmd_deg
+            x[13], x[14], x[15] = dela_ach_deg, dele_ach_deg, delr_ach_deg
         
         # Get current altitude
         h_m = -p3_n_m
@@ -76,7 +75,7 @@ class eom_flat_earth(eom):
         # Vehicle returns mapped body forces
         Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2 = vehicle.get_forces_and_moments(alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
                                                                                                                     p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                                                                                                                    delr_ach_deg, delsb_deg, delt_percent, C_w2b)
+                                                                                                                    delr_ach_deg, delsb_deg, delt_percent, C_w2b, speedbrake)
 
         # Velocity Equations
         dx[0] = (Fx_b_kgmps2 / m_total_kg) + g_b_mps2[0] - w_b_mps * q_b_rps + v_b_mps * r_b_rps
@@ -131,12 +130,9 @@ class eom_flat_earth(eom):
         dx[10:13] = C_b2n @ np.array([u_b_mps, v_b_mps, w_b_mps])
 
         # Actuation & Fuel
-        # dx[13] = vehicle.aileron_kinematics(dela_cmd_deg, dela_ach_deg)
-        # dx[14] = vehicle.elevator_kinematics(dele_cmd_deg, dele_ach_deg)
-        # dx[15] = vehicle.rudder_kinematics(delr_cmd_deg, delr_ach_deg)
-        dx[13] = -1/vehicle.tau_a_s*dela_ach_deg + 1/vehicle.tau_a_s*dela_cmd_deg
-        dx[14] = -1/vehicle.tau_e_s*dele_ach_deg + 1/vehicle.tau_e_s*dele_cmd_deg
-        dx[15] = -1/vehicle.tau_r_s*delr_ach_deg + 1/vehicle.tau_r_s*delr_cmd_deg
+        dx[13] = vehicle.aileron_kinematics(dela_cmd_deg, dela_ach_deg)
+        dx[14] = vehicle.elevator_kinematics(dele_cmd_deg, dele_ach_deg)
+        dx[15] = vehicle.rudder_kinematics(delr_cmd_deg, delr_ach_deg)
         dx[16] = -m_fuel_dot_kgps
 
         # Aux Data

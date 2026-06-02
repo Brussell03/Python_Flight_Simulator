@@ -42,33 +42,29 @@ def compare_data(file_paths, save_plots=False):
     # Block execution until user closes all plot windows
     plt.show(block=True)
 
-def compare_data_to_file(dataset, file_path, save_plots=False):
+def compare_data_to_file(dataset, file_path, save_dir=None, show_plots=False):
     """Loads dataset and plots it with provided dataset them."""
     
     datasets = [dataset, load_npz(file_path)]
 
     # Setup the output directory
-    out_dir = "./output_data/comparisons/"
-    comparison_name = "_vs_".join([d['name'] for d in datasets])[:50] # Truncate if too long
-    plot_dir = os.path.join(out_dir, comparison_name)
     
-    if save_plots:
-        os.makedirs(plot_dir, exist_ok=True)
-    else:
-        plot_dir = None
     
-    plotter = SimulatorPlotter(datasets, plot_dir=plot_dir)
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+    
+    plotter = SimulatorPlotter(datasets, plot_dir=save_dir)
 
     # Render and display the plots
-    plotter.plot_6dof(show=True)
-    plotter.plot_attitude(show=True)
-    plotter.plot_controls(show=True)
-    plotter.plot_aerodynamics(show=True)
-    plotter.plot_geodetic(show=True)
-    plotter.plot_ned_velocity(show=True)
+    plotter.plot_6dof(show=show_plots)
+    plotter.plot_attitude(show=show_plots)
+    plotter.plot_controls(show=show_plots)
+    plotter.plot_aerodynamics(show=show_plots)
+    plotter.plot_geodetic(show=show_plots)
+    plotter.plot_ned_velocity(show=show_plots)
     
     # Block execution until user closes all plot windows
-    plt.show(block=True)
+    if show_plots: plt.show(block=True)
 
 if __name__ == "__main__":
     # Command line usage: python compare_data.py path/to/run1.npz path/to/run2.npz ...

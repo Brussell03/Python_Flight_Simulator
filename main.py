@@ -6,16 +6,28 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from src.engine.compare_data import compare_data_to_file
-from src.utils.config_parser import load_simulation_config
+from src.utils.config_parser import load_simulation_config, resolve_path
 from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
 from src.utils.interpolators import fastInterp1
 from src.engine.numerical_integrators import RK4, adaptive_integration
 from src.utils.plotting import SimulatorPlotter
 
-def run_job(config_path):
+def run_job(input_path):
+    # Resolve the configuration file path
+    if os.path.isdir(input_path):
+        config_path = os.path.join(input_path, "config.yaml")
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Expected 'config.yaml' inside directory: {input_path}")
+    else:
+        config_path = input_path
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    
     # 1. Initialization
-    eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0 = load_simulation_config(config_path)
+    eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir = load_simulation_config(config_path)
+    
+    job_name = meta_cfg['job_name']
     
     t0_s, tf_s, dt_s = instruction_cfg['t0_s'], instruction_cfg['tf_s'], instruction_cfg['dt_s']
     state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
@@ -105,12 +117,12 @@ def run_job(config_path):
     # 15 dele_ach_deg, achieved blended elevator position
     # 16 delr_ach_deg, achieved blended rudder position
     # 17 m_fuel_kg, mass of fuel
-    # 18 Cs_mps, speed of sound interpolated from atmosphere model (row vector)
-    # 19 Rho_kgpm3, Air density interpolated from atmosphere model (row vector)
-    # 20 Mach, Mach number (row vector)
-    # 21 Alpha_rad, Angle of attack (row vector)
-    # 22 Beta_rad, Angle of sideslip (row vector)
-    # 23 True_Airspeed_mps, True airspeed (row vector)
+    # 18 Cs_mps, speed of sound interpolated from atmosphere model
+    # 19 Rho_kgpm3, Air density interpolated from atmosphere model
+    # 20 Mach, Mach number
+    # 21 Alpha_rad, Angle of attack
+    # 22 Beta_rad, Angle of sideslip
+    # 23 True_Airspeed_mps, True airspeed
     # 24 phi_rad, roll angle
     # 25 theta_rad, pitch angle
     # 26 psi_rad, yaw angle
@@ -129,13 +141,10 @@ def run_job(config_path):
     # 5. Output Management
     if output_cfg:
         
-        job_name = meta_cfg['job_name']
-        base_out_dir = output_cfg.get('save_dir', './output_data/')
-        
         # Define Job-Specific Directories
-        job_dir = os.path.join(base_out_dir, job_name)
-        data_dir = os.path.join(job_dir, "data")
-        plot_dir = os.path.join(job_dir, "plots")
+        out_dir = os.path.join(job_dir, 'output')
+        data_dir = os.path.join(out_dir, "data")
+        plot_dir = os.path.join(out_dir, "plots")
         
         # Save Numerical Data
         if output_cfg.get('save_data', False):
@@ -169,10 +178,19 @@ def run_job(config_path):
             else:
                 # Force close all background figures before moving to comparison
                 plt.close('all')
-        
-        if output_cfg.get('compare') is not None: compare_data_to_file({'name': job_name, 'data': sim_data}, output_cfg.get('compare'), output_cfg.get('save_compare', False))
+    
+    if instruction_cfg.get('compare', False) and compare_cfg.get('path') is not None:
+        show_plots = compare_cfg.get('show_plots', False)
+        compare_path = resolve_path(job_dir, compare_cfg.get('path'))
+        save_path = os.path.join(job_dir, "output/comparisons/") if compare_cfg.get('save_compare', False) else None
+        compare_data_to_file({'name': job_name, 'data': sim_data}, file_path=compare_path, save_dir=save_path, show_plots=show_plots)
 
 if __name__ == "__main__":
-    # Allows running via command line: python main.py configs/x15_descending_turn.yaml
-    target_config = sys.argv[1] if len(sys.argv) > 1 else "configs/x15_descending_turn.yaml"
-    run_job(target_config)
+    # Allows running via command line: python main.py jobs/x15_descending_turn
+    input_path = sys.argv[1] if len(sys.argv) > 1 else "jobs/x15_descending_turn"
+    
+    try:
+        run_job(input_path)
+    except Exception as e:
+        print(f"Simulation failed: {e}")
+        sys.exit(1)

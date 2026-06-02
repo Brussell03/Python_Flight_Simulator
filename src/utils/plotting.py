@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
 import numpy as np
 import os
 from src.utils.constants import R2D
@@ -92,7 +93,58 @@ class SimulatorPlotter:
         handles, labels = ax.get_legend_handles_labels()
         if handles and len(self.datasets) > 1:
             ax.legend(handles, labels, loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
+    
+    def _plot_gradient_track(self, ax, keyX, keyY):
+        """Plots lines with a color gradient mapped to time."""
+        all_x = []
+        all_y = []
 
+        for ds in self.datasets:
+            if ds[keyX] is None or ds[keyY] is None:
+                continue
+                
+            x = ds[keyX]
+            y = ds[keyY]
+            t = ds['t']
+            
+            # Filter out NaNs for plotting and bounds calculation
+            mask = ~np.isnan(x) & ~np.isnan(y)
+            if not np.any(mask):
+                continue
+                
+            x_clean, y_clean = x[mask], y[mask]
+            
+            # Create segments for LineCollection
+            points = np.array([x_clean, y_clean]).T.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
+            
+            # Create the LineCollection
+            norm = plt.Normalize(t.min(), t.max())
+            lc = LineCollection(segments, cmap='viridis', norm=norm, linewidth=1.5, alpha=0.8)
+            lc.set_array(t[mask])
+            
+            line = ax.add_collection(lc)
+            
+            # Collect data for manual axis scaling
+            all_x.append(x_clean)
+            all_y.append(y_clean)
+
+        # Only set limits if we have valid data
+        if all_x and all_y:
+            x_flat = np.concatenate(all_x)
+            y_flat = np.concatenate(all_y)
+            
+            ax.set_xlim(np.nanmin(x_flat), np.nanmax(x_flat))
+            ax.set_ylim(np.nanmin(y_flat), np.nanmax(y_flat))
+            
+            # Re-add colorbar if data exists
+            try:
+                cbar = plt.colorbar(line, ax=ax, fraction=0.046, pad=0.04)
+                cbar.set_label('Time [s]', color='#B0B0B0', fontsize=9)
+                cbar.ax.tick_params(colors='#B0B0B0', labelsize=8)
+            except UnboundLocalError:
+                pass # No data rendered, skip colorbar
+    
     def plot_6dof(self, filename="6dof.png", show=False):
         fig, axes = self._setup_figure("6-DOF State Vectors", 2, 3, (12, 8))
         keys = ['u', 'v', 'w', 'p', 'q', 'r']
@@ -176,7 +228,7 @@ class SimulatorPlotter:
         
         # Ground Track Plot
         ax_track = ax_flat[3]
-        self._plot_all(ax_track, 'lon', 'lat')
+        self._plot_gradient_track(ax_track, 'lon', 'lat')
         self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]', equal_aspect=True)
         
         plt.tight_layout()
