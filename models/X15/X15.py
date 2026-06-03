@@ -16,6 +16,7 @@ from src.utils.interpolators import fastInterp1, fastInterp2
 
 class X15(Vehicle):
     def __init__(self, data_path='models/X15/aerodynamic_model/X15_aerodynamic_database.npz', time_history_path=None):
+        
         # Load database into memory once
         self.db = np.load(data_path)
         
@@ -23,10 +24,6 @@ class X15(Vehicle):
         self.b_m = 22.36 * FT2M
         self.c_m = 10.27 * FT2M
         self.A_ref_m2 = 18.6
-        
-        # Mass Bounds
-        self.m_dry_kg = 14700 * LB2KG
-        self.m_wet_kg = 33000 * LB2KG
         
         # Actuation Time Constants (First-order lag)
         self.tau_a_s = 0.1
@@ -54,6 +51,22 @@ class X15(Vehicle):
         
         # Initialize Aerodynamic Derivatives and other tables
         self._init_tables()
+    
+    @property
+    def vehicle_name(self) -> str:
+        return "North American X-15"
+    
+    @property
+    def short_name(self) -> str:
+        return "X15"
+    
+    @property
+    def m_dry_kg(self) -> float:
+        return 14700 * LB2KG
+    
+    @property
+    def m_wet_kg(self) -> float:
+        return 33000 * LB2KG
     
     def _load_time_history(self, path):
         """

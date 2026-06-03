@@ -6,6 +6,7 @@ R2D = 180.0 / math.pi
 FT2M = 0.3048
 LB2KG = 0.453592
 SLUG2KG = 14.5939
+IN2M = 0.0254
 
 # --- WGS-84 Earth Model Constants ---
 A_WGS84_M = 6378137.0

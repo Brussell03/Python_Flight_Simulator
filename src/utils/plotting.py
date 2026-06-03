@@ -9,11 +9,12 @@ class SimulatorPlotter:
     Handles all visual output for the flight simulation.
     Maps data arrays to plots using specified indices.
     """
-    def __init__(self, dataset_list, plot_dir):
+    def __init__(self, dataset_list, title_prefix="", plot_dir=None):
         """
         dataset_list: List of dictionaries [{'name': str, 'data': np.array}]
         """
         self.plot_dir = plot_dir
+        self.title_prefix = title_prefix + "\n" if title_prefix != "" else ""
         
         # If the user passes a single dict, convert it to a list
         if isinstance(dataset_list, dict):
@@ -45,7 +46,7 @@ class SimulatorPlotter:
         """Internal helper for centralized figure formatting."""
         fig, axes = plt.subplots(rows, cols, figsize=figsize)
         fig.patch.set_facecolor('#121212') 
-        fig.suptitle(title, color='#E0E0E0', fontsize=14, fontweight='bold')
+        fig.suptitle(self.title_prefix + title, color='#E0E0E0', fontsize=14, fontweight='bold')
         return fig, np.atleast_1d(axes)
 
     def _format_ax(self, ax, ylabel, xlabel='Time [s]', equal_aspect=False, min_range=1e-2):

@@ -3,6 +3,8 @@ import os
 import yaml
 import ussa1976
 
+from models.bricks.bricks import NASAAtmos02Brick, NASAAtmos03Brick
+from models.spheres.spheres import Blueberry, BowlingBall, Carronade12lb, Musketball50cal, NASAAtmos01Sphere, TsarCannonball
 from src.dynamics.eom_wgs84 import eom_wgs84
 from src.dynamics.eom_flat_earth import eom_flat_earth
 from models.X15.X15 import X15
@@ -42,6 +44,22 @@ def load_simulation_config(yaml_path):
     # Instantiate Vehicle Model Factory
     if config['vehicle']['model'] == 'X15':
         vehicle = X15(time_history_path=th_path)
+    elif config['vehicle']['model'] == 'Musketball50cal':
+        vehicle = Musketball50cal()
+    elif config['vehicle']['model'] == 'Carronade12lb':
+        vehicle = Carronade12lb()
+    elif config['vehicle']['model'] == 'Blueberry':
+        vehicle = Blueberry()
+    elif config['vehicle']['model'] == 'BowlingBall':
+        vehicle = BowlingBall()
+    elif config['vehicle']['model'] == 'TsarCannonball':
+        vehicle = TsarCannonball()
+    elif config['vehicle']['model'] == 'NASAAtmos01Sphere':
+        vehicle = NASAAtmos01Sphere()
+    elif config['vehicle']['model'] == 'NASAAtmos02Brick':
+        vehicle = NASAAtmos02Brick()
+    elif config['vehicle']['model'] == 'NASAAtmos03Brick':
+        vehicle = NASAAtmos03Brick()
     else:
         raise ValueError(f"Unknown vehicle model: {config['vehicle']['model']}")
     
@@ -111,7 +129,7 @@ def load_simulation_config(yaml_path):
     # Instantiate EOM
     eom_type = instruction_cfg.get('eom', 'WGS84')
     
-    if eom_type == "Flat_Earth":
+    if eom_type == "Flat Earth":
         eom = eom_flat_earth(lat0_rad, long0_rad)
         x0[10] = 0
         x0[11] = 0

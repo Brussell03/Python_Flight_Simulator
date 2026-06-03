@@ -61,7 +61,7 @@ def get_unit_conversion(col_name, idx):
         
     return factor, conversion_msg
 
-def combine_data(file_paths, dt=0.01, output_name="Digitized_Flight_Data"):
+def combine_data(file_paths, dt=0.01, output_name="Combined_Data", data_name="Flight Test"):
     
     # 1. Load all valid CSVs and determine global time bounds
     datasets = []
@@ -136,11 +136,11 @@ def combine_data(file_paths, dt=0.01, output_name="Digitized_Flight_Data"):
         sim_data[:, ds['idx']] = interpolated_data
 
     # 4. Save to .npz format
-    out_dir = "./output_data/combined_data/"
+    out_dir = "./combined_data/"
     os.makedirs(out_dir, exist_ok=True)
     
     save_path = os.path.join(out_dir, f"{output_name}.npz")
-    meta = {'job_name': output_name}
+    meta = {'job_name': output_name, 'data_name': data_name}
     
     np.savez(save_path, data=sim_data, meta=meta)
     
@@ -153,8 +153,9 @@ if __name__ == "__main__":
     
     parser.add_argument("files", nargs="+", help="List of .csv files to combine")
     parser.add_argument("--dt", type=float, default=0.01, help="Time step for the interpolated master array (default: 0.01)")
-    parser.add_argument("--name", type=str, default="Digitized_Flight_Data", help="Name of the output job/file")
+    parser.add_argument("--filename", type=str, default="Combined_Data", help="Name of the output job/file")
+    parser.add_argument("--dataname", type=str, default="Flight Test", help="Name of the output data")
     
     args = parser.parse_args()
     
-    combine_data(args.files, dt=args.dt, output_name=args.name)
+    combine_data(args.files, dt=args.dt, output_name=args.filename, data_name=args.dataname)

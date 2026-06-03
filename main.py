@@ -137,6 +137,8 @@ def run_job(input_path):
     #==============================================================================
     
     sim_data = eom.post_process(x, t_s, amod, aux_data_accum)
+    data_name = 'Simulation'
+    sim_dict = {'name': data_name, 'data': sim_data}
 
     # 5. Output Management
     if output_cfg:
@@ -150,7 +152,7 @@ def run_job(input_path):
         if output_cfg.get('save_data', False):
             os.makedirs(data_dir, exist_ok=True)
             save_path = os.path.join(data_dir, f"{job_name}.npz")
-            meta = {'job_name': job_name}
+            meta = {'job_name': job_name, 'data_name': data_name}
             np.savez(save_path, data=sim_data, meta=meta)
             print(f"\n--- Saving Output ---")
             print(f"Data saved to: {save_path}")
@@ -162,7 +164,7 @@ def run_job(input_path):
         if any(plot_cfg.values()): 
             # Only instantiate plotter and make dir if at least one plot is True
             os.makedirs(plot_dir, exist_ok=True)
-            plotter = SimulatorPlotter({'name': job_name, 'data': sim_data}, plot_dir=plot_dir)
+            plotter = SimulatorPlotter(sim_dict, title_prefix=vehicle.vehicle_name, plot_dir=plot_dir)
             
             if plot_cfg.get('6dof', False):         plotter.plot_6dof(show=show_plots)
             if plot_cfg.get('attitude', False):     plotter.plot_attitude(show=show_plots)
@@ -183,7 +185,7 @@ def run_job(input_path):
         show_plots = compare_cfg.get('show_plots', False)
         compare_path = resolve_path(job_dir, compare_cfg.get('path'))
         save_path = os.path.join(job_dir, "output/comparisons/") if compare_cfg.get('save_compare', False) else None
-        compare_data_to_file({'name': job_name, 'data': sim_data}, file_path=compare_path, save_dir=save_path, show_plots=show_plots)
+        compare_data_to_file(sim_dict, title_prefix=vehicle.vehicle_name, file_path=compare_path, save_dir=save_path, show_plots=show_plots)
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py jobs/x15_descending_turn

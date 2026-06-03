@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 from src.utils.plotting import SimulatorPlotter # Adjust import path as needed
 
 def load_npz(file_path):
-    """Loads npz and extracts data and job_name."""
+    """Loads npz and extracts data and data_name."""
     loaded = np.load(file_path, allow_pickle=True)
     return {
         'data': loaded['data'],
-        'name': loaded['meta'].item()['job_name']
+        'name': loaded['meta'].item()['data_name']
     }
 
 def compare_data(file_paths, save_plots=False):
@@ -20,7 +20,7 @@ def compare_data(file_paths, save_plots=False):
     datasets = [load_npz(f) for f in file_paths]
 
     # Setup the output directory
-    out_dir = "./output_data/comparisons/"
+    out_dir = "./comparisons/"
     comparison_name = "_vs_".join([d['name'] for d in datasets])[:50] # Truncate if too long
     plot_dir = os.path.join(out_dir, comparison_name)
     
@@ -42,7 +42,7 @@ def compare_data(file_paths, save_plots=False):
     # Block execution until user closes all plot windows
     plt.show(block=True)
 
-def compare_data_to_file(dataset, file_path, save_dir=None, show_plots=False):
+def compare_data_to_file(dataset, file_path, title_prefix="", save_dir=None, show_plots=False):
     """Loads dataset and plots it with provided dataset them."""
     
     datasets = [dataset, load_npz(file_path)]
@@ -53,7 +53,7 @@ def compare_data_to_file(dataset, file_path, save_dir=None, show_plots=False):
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
     
-    plotter = SimulatorPlotter(datasets, plot_dir=save_dir)
+    plotter = SimulatorPlotter(datasets, title_prefix=title_prefix, plot_dir=save_dir)
 
     # Render and display the plots
     plotter.plot_6dof(show=show_plots)
