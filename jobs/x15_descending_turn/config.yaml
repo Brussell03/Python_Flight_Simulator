@@ -6,7 +6,7 @@ vehicle:
     model: "X15"
 
 instructions:
-    eom: "WGS84"
+    earth_model: "WGS84"
     integrator: "RK45"
     simulate: true
     perform_trim: true

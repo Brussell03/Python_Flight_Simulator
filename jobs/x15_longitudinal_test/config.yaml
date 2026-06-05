@@ -4,9 +4,11 @@ meta:
 
 vehicle:
     model: "X15"
+    overrides:
 
 instructions:
-    eom: "WGS84"
+    earth_model: "WGS84"
+    gravity_type: "J2"
     integrator: "RK45"
     simulate: true
     perform_trim: false

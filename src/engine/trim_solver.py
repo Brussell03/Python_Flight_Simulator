@@ -3,10 +3,10 @@ import numpy as np
 import math
 from scipy.optimize import minimize
 
-from src.utils.constants import D2R, R2D, A_WGS84_M, G0_MPS2
+from src.utils.constants import D2R, R2D
 from src.utils.interpolators import fastInterp1
 
-def trim_solver(eom, vehicle, amod, cmod, tmod, x):
+def trim_solver(eom, earth, vehicle, amod, cmod, tmod, x):
     """
     Finds the trimmed flight state by minimizing angular accelerations subject to kinematic constraints.
     """
@@ -18,8 +18,6 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
         p, q, r = x_trim[3:6]
         phi_rad, theta_rad, psi_rad = x_trim[6:9]
         rest_of_state = x_trim[9:].copy()
-        if is_flat_earth:
-            rest_of_state[2] = -x_trim[11] # Map positive altitude to NED Z-axis (p3)
 
         # Convert Euler to Quaternion (XYZ/321 sequence)
         cphi, sphi = np.cos(phi_rad/2), np.sin(phi_rad/2)
@@ -92,12 +90,9 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
             
             h_m_current = x_trim[11]
             
-            if is_flat_earth:
-                g_local = fastInterp1(amod["alt_m"], amod['g_mps2'], h_m_current)
-            else:
-                s_lat = math.sin(x_trim[9])
-                g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
-                g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
+            s_lat = math.sin(x_trim[9])
+            g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
+            g_local = g_0 * (earth.a / (earth.a + h_m_current))**2
             
             G = (psidot_target_rps * V_T_target_mps) / g_local
             a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
@@ -138,12 +133,9 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
             
             h_m_current = x_trim[11] 
             
-            if is_flat_earth:
-                g_local = fastInterp1(amod["alt_m"], amod['g_mps2'], h_m_current)
-            else:
-                s_lat = math.sin(x_trim[9])
-                g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
-                g_local = g_0 * (A_WGS84_M / (A_WGS84_M + h_m_current))**2
+            s_lat = math.sin(x_trim[9])
+            g_0 = G0_MPS2 * (1.0 + 0.00193185265241 * s_lat**2) / math.sqrt(1.0 - 0.00669437999014 * s_lat**2)
+            g_local = g_0 * (earth.a / (earth.a + h_m_current))**2
             
             G = (psidot_target_rps * V_T_target_mps) / g_local
             a = 1 - G*math.tan(alpha_current_rad)*math.sin(beta_current_rad)
@@ -208,8 +200,6 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
     # 3. Setup and Execution
     print("--- Unpowered Trim Solver ---")
     
-    is_flat_earth = type(eom).__name__ == "eom_flat_earth"
-    
     cmod['trim_flag'] = cmod.get('trim_flag', False) # Defaults to off if missing
     cmod['linearization_flag'] = cmod.get('linearization_flag', False)
     
@@ -228,7 +218,7 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
         v_over_VT = x[1]/V_T_curr_mps
     beta_curr_rad = math.asin(v_over_VT)
     
-    h_initial_m = -x[12] if is_flat_earth else x[12]
+    h_initial_m = x[12]
     h_target_m = tmod.get('h_m', h_initial_m)
     
     Cs_mps = fastInterp1(amod["alt_m"], amod["c_mps"], h_initial_m)
@@ -332,8 +322,6 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
     auxillary_data = np.empty((7,), dtype=float)
     
     rest_of_state_full = x_trim[9:].copy()
-    if is_flat_earth:
-        rest_of_state_full[2] = -x_trim[11]
 
     x_trim_full = np.concatenate((x_trim[0:6], [q0, q1, q2, q3], rest_of_state_full))
     dx, auxillary_data = eom.solve_eom(0, x_trim_full, dx, auxillary_data, None, vehicle, amod, cmod)
@@ -358,9 +346,9 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
         print(f"phi_deg:   {phi_rad*R2D:.8f}")
         print(f"theta_deg: {theta_rad*R2D:.8f}")
         print(f"psi_deg:   {psi_rad*R2D:.8f}")
-        print(f"p1_n_m:    {x_trim[9]:.8f}"     if is_flat_earth else f"lat_deg:   {x_trim[9]*R2D:.8f}")
-        print(f"p2_n_m:    {x_trim[10]:.8f}"    if is_flat_earth else f"long_deg:  {x_trim[10]*R2D:.8f}")
-        print(f"p3_n_m:    {-x_trim[11]:.8f}"   if is_flat_earth else f"alt_m:     {x_trim[11]:.8f}")
+        print(f"lat_deg:   {x_trim[9]*R2D:.8f}")
+        print(f"long_deg:  {x_trim[10]*R2D:.8f}")
+        print(f"alt_m:     {x_trim[11]:.8f}")
         print(f"dela_deg:  {x_trim[12]:.8f}")
         print(f"dele_deg:  {x_trim[13]:.8f}")
         print(f"delr_deg:  {x_trim[14]:.8f}")
@@ -375,9 +363,9 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, x):
         print(f"phi_rad-dot:      {phi_rad_dot: .8f}")
         print(f"theta_rad-dot:    {theta_rad_dot: .8f}")
         print(f"psi_rad-dot:      {psi_rad_dot: .8f}")
-        print(f"p1_n_m-dot:       {dx[10]: .8f}"       if is_flat_earth else f"lat_deg-dot:      {dx[10]*R2D: .8f}")
-        print(f"p2_n_m-dot:       {dx[11]: .8f}"       if is_flat_earth else f"long_deg-dot:     {dx[11]*R2D: .8f}")
-        print(f"p3_n_m-dot:       {dx[12]: .8f}"       if is_flat_earth else f"alt_m-dot:        {dx[12]: .8f}")
+        print(f"lat_deg-dot:      {dx[10]*R2D: .8f}")
+        print(f"long_deg-dot:     {dx[11]*R2D: .8f}")
+        print(f"alt_m-dot:        {dx[12]: .8f}")
         print(f"dela_ach_deg-dot: {dx[13]: .8f}")
         print(f"dele_ach_deg-dot: {dx[14]: .8f}")
         print(f"delr_ach_deg-dot: {dx[15]: .8f}")

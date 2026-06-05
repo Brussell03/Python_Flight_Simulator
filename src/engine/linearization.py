@@ -4,9 +4,7 @@ import control as ctrl
 import math
 import matplotlib.pyplot as plt
 
-from src.dynamics.eom_wgs84 import eom_wgs84
-
-def compute_state_space(x_trim, u_trim, vehicle, amod, cmod, state_names):
+def compute_state_space(eom, x_trim, u_trim, vehicle, amod, cmod, state_names):
     """
     Computes the full 17x17 A and 17x4 B matrices, then rigorously truncates 
     them to the 10x10 core bare-airframe 6-DOF dynamics.
@@ -48,11 +46,11 @@ def compute_state_space(x_trim, u_trim, vehicle, amod, cmod, state_names):
         x_plus = np.copy(x_trim)
         x_plus[j] += eps_x[j]
         cmod['dela_cmd_deg'], cmod['dele_cmd_deg'], cmod['delr_cmd_deg'], cmod['throttle_percent'] = u_trim
-        dx_plus, _ = eom_wgs84(0, x_plus, dx.copy(), auxillary_data, vehicle, amod, cmod)
+        dx_plus, _ = eom(0, x_plus, dx.copy(), auxillary_data, vehicle, amod, cmod)
         
         x_minus = np.copy(x_trim)
         x_minus[j] -= eps_x[j]
-        dx_minus, _ = eom_wgs84(0, x_minus, dx.copy(), auxillary_data, vehicle, amod, cmod)
+        dx_minus, _ = eom(0, x_minus, dx.copy(), auxillary_data, vehicle, amod, cmod)
         
         A_full[:, j] = (dx_plus - dx_minus) / (2 * eps_x[j])
         
@@ -60,12 +58,12 @@ def compute_state_space(x_trim, u_trim, vehicle, amod, cmod, state_names):
         u_plus = np.copy(u_trim)
         u_plus[j] += eps_u[j]
         cmod['dela_cmd_deg'], cmod['dele_cmd_deg'], cmod['delr_cmd_deg'], cmod['throttle_percent'] = u_plus
-        dx_plus, _ = eom_wgs84(0, x_trim, dx, auxillary_data, vehicle, amod, cmod)
+        dx_plus, _ = eom(0, x_trim, dx, auxillary_data, vehicle, amod, cmod)
         
         u_minus = np.copy(u_trim)
         u_minus[j] -= eps_u[j]
         cmod['dela_cmd_deg'], cmod['dele_cmd_deg'], cmod['delr_cmd_deg'], cmod['throttle_percent'] = u_minus
-        dx_minus, _ = eom_wgs84(0, x_trim, dx, auxillary_data, vehicle, amod, cmod)
+        dx_minus, _ = eom(0, x_trim, dx, auxillary_data, vehicle, amod, cmod)
         
         B_full[:, j] = (dx_plus - dx_minus) / (2 * eps_u[j])
 

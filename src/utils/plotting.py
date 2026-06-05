@@ -7,11 +7,11 @@ from src.utils.constants import R2D
 class SimulatorPlotter:
     """
     Handles all visual output for the flight simulation.
-    Maps data arrays to plots using specified indices.
+    Maps data structures to plots using dataclass attributes or dict keys.
     """
     def __init__(self, dataset_list, title_prefix="", plot_dir=None):
         """
-        dataset_list: List of dictionaries [{'name': str, 'data': np.array}]
+        dataset_list: List of dictionaries [{'name': str, 'data': SimData object or npz dict}]
         """
         self.plot_dir = plot_dir
         self.title_prefix = title_prefix + "\n" if title_prefix != "" else ""
@@ -26,20 +26,46 @@ class SimulatorPlotter:
         self.save = plot_dir is not None
     
     def _process_dataset(self, item):
-        """Maps columns to keys and stores the job name."""
+        """Maps SimData attributes to standard internal plotting keys."""
         data = item['data']
+        
+        def _get_val(obj, key):
+            """Safely extract data whether obj is a live Dataclass or a loaded npz dict."""
+            if hasattr(obj, key):
+                return getattr(obj, key)
+            elif isinstance(obj, dict) or hasattr(obj, '__getitem__'):
+                return obj[key]
+            raise KeyError(f"Missing expected data field: {key}")
+
         return {
             'name': item['name'],
-            't': data[:, 0],
-            'u': data[:, 1], 'v': data[:, 2], 'w': data[:, 3],
-            'p': data[:, 4] * R2D, 'q': data[:, 5] * R2D, 'r': data[:, 6] * R2D,
-            'lat': data[:, 11] * R2D, 'lon': data[:, 12] * R2D, 'alt': data[:, 13],
-            'dela_ach': data[:, 14], 'dele_ach': data[:, 15], 'delr_ach': data[:, 16],
-            'mach': data[:, 20], 'alpha': data[:, 21] * R2D, 'beta': data[:, 22] * R2D, 'tas': data[:, 23],
-            'phi': data[:, 24] * R2D, 'theta': data[:, 25] * R2D, 'psi': data[:, 26] * R2D,
-            'u_n': data[:, 27], 'v_n': data[:, 28], 'w_n': data[:, 29],
-            'dela_cmd': data[:, 30], 'dele_cmd': data[:, 31], 'delr_cmd': data[:, 32],
-            'throttle': data[:, 33]
+            't': _get_val(data, 't_s'),
+            'u': _get_val(data, 'u_b_mps'),
+            'v': _get_val(data, 'v_b_mps'),
+            'w': _get_val(data, 'w_b_mps'),
+            'p': _get_val(data, 'p_b_rps') * R2D,
+            'q': _get_val(data, 'q_b_rps') * R2D,
+            'r': _get_val(data, 'r_b_rps') * R2D,
+            'lat': _get_val(data, 'lat_rad') * R2D,
+            'lon': _get_val(data, 'long_rad') * R2D,
+            'alt': _get_val(data, 'h_m'),
+            'dela_ach': _get_val(data, 'dela_ach_deg'),
+            'dele_ach': _get_val(data, 'dele_ach_deg'),
+            'delr_ach': _get_val(data, 'delr_ach_deg'),
+            'mach': _get_val(data, 'mach'),
+            'alpha': _get_val(data, 'alpha_rad') * R2D,
+            'beta': _get_val(data, 'beta_rad') * R2D,
+            'tas': _get_val(data, 'true_airspeed_mps'),
+            'phi': _get_val(data, 'phi_rad') * R2D,
+            'theta': _get_val(data, 'theta_rad') * R2D,
+            'psi': _get_val(data, 'psi_rad') * R2D,
+            'u_n': _get_val(data, 'u_n_mps'),
+            'v_n': _get_val(data, 'v_n_mps'),
+            'w_n': _get_val(data, 'w_n_mps'),
+            'dela_cmd': _get_val(data, 'dela_cmd_deg'),
+            'dele_cmd': _get_val(data, 'dele_cmd_deg'),
+            'delr_cmd': _get_val(data, 'delr_cmd_deg'),
+            'throttle': _get_val(data, 'delt_percent')
         }
 
     def _setup_figure(self, title, rows, cols, figsize):
@@ -60,7 +86,6 @@ class SimulatorPlotter:
             spine.set_color('#404040')
         
         if equal_aspect:
-            # Source: Matplotlib documentation for set_aspect
             ax.set_aspect('equal', adjustable='datalim')
         
         # Enforce minimum axis ranges to prevent micro-scaling on noise

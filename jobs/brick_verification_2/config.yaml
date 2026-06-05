@@ -6,7 +6,7 @@ vehicle:
     model: "NASAAtmos03Brick"
 
 instructions:
-    eom: "Flat Earth"
+    earth_model: "Spherical_NonRotating"
     integrator: "RK45"
     simulate: true
     compare: false

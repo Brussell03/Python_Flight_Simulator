@@ -1,17 +1,20 @@
 import argparse
 import os
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
 from src.utils.plotting import SimulatorPlotter # Adjust import path as needed
 
 def load_npz(file_path):
-    """Loads npz and extracts data and data_name."""
+    """Loads npz and extracts individual SimData arrays and meta."""
     loaded = np.load(file_path, allow_pickle=True)
+    
+    # Cast the NpzFile object to a standard dictionary.
+    data_dict = dict(loaded)
+    
     return {
-        'data': loaded['data'],
-        'name': loaded['meta'].item()['data_name']
+        'data': data_dict,
+        'name': data_dict['meta'].item()['data_name']
     }
 
 def compare_data(file_paths, save_plots=False):
@@ -43,13 +46,11 @@ def compare_data(file_paths, save_plots=False):
     plt.show(block=True)
 
 def compare_data_to_file(dataset, file_path, title_prefix="", save_dir=None, show_plots=False):
-    """Loads dataset and plots it with provided dataset them."""
+    """Loads dataset and plots it with provided dataset."""
     
     datasets = [dataset, load_npz(file_path)]
 
     # Setup the output directory
-    
-    
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
     

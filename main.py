@@ -1,6 +1,6 @@
+from dataclasses import asdict
 import sys
 import os
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -9,9 +9,9 @@ from src.engine.compare_data import compare_data_to_file
 from src.utils.config_parser import load_simulation_config, resolve_path
 from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
-from src.utils.interpolators import fastInterp1
 from src.engine.numerical_integrators import RK4, adaptive_integration
 from src.utils.plotting import SimulatorPlotter
+from src.utils.constants import NUM_AUX
 
 def run_job(input_path):
     # Resolve the configuration file path
@@ -75,10 +75,10 @@ def run_job(input_path):
         
         x = np.zeros((len(x0), nt_s))
         x[:, 0] = x0
-        aux_data_accum = np.zeros((4, nt_s))
+        aux_data_accum = np.zeros((NUM_AUX, nt_s))
         
         dx_tmp = np.empty(x.shape[0], dtype=float)
-        aux_tmp = np.empty(4, dtype=float)
+        aux_tmp = np.empty(aux_data_accum.shape[0], dtype=float)
         
         for i in tqdm(range(nt_s - 1), desc="Simulating", unit="steps", leave=True):
             t_i = t_s[i]
@@ -92,49 +92,6 @@ def run_job(input_path):
 
     # Vectorized Post-Processing
     print("\n--- Post-Processing Data ---")
-
-    #==============================================================================
-    # Save the data. Use pointers to automatically accommodate updates to 
-    # state and variable indices in plots.
-    #==============================================================================
-    #
-    # Sim_Data column order 
-    # 0 t_s 
-    # 1 u_b_mps, axial velocity of CM wrt inertial CS resolved in aircraft body fixed CS
-    # 2 v_b_mps, lateral velocity of CM wrt inertial CS resolved in aircraft body fixed CS
-    # 3 w_b_mps, vertical velocity of CM wrt inertial CS resolved in aircraft body fixed CS
-    # 4 p_b_rps, roll angular velocity of body fixed CS with respect to inertial CS
-    # 5 q_b_rps, pitch angular velocity of body fixed CS with respect to inertial CS
-    # 6 r_b_rps, yaw angular velocity of body fixed CS with respect to inertial CS
-    # 7 q0 quaternion scalar component
-    # 8 q1 quaternion vector i-axis component
-    # 9 q2 quaternion vector j-axis component
-    # 10 q3 quaternion vector k-axis component
-    # 11 lat_rad, geodetic latitude of aircraft resolved in WGS84 CS
-    # 12 long_rad, longitude of aircraft resolved in WGS84 CS
-    # 13 h_m, altitude of aircraft resolved in WGS84 CS
-    # 14 dela_ach_deg, achieved blended aileron position
-    # 15 dele_ach_deg, achieved blended elevator position
-    # 16 delr_ach_deg, achieved blended rudder position
-    # 17 m_fuel_kg, mass of fuel
-    # 18 Cs_mps, speed of sound interpolated from atmosphere model
-    # 19 Rho_kgpm3, Air density interpolated from atmosphere model
-    # 20 Mach, Mach number
-    # 21 Alpha_rad, Angle of attack
-    # 22 Beta_rad, Angle of sideslip
-    # 23 True_Airspeed_mps, True airspeed
-    # 24 phi_rad, roll angle
-    # 25 theta_rad, pitch angle
-    # 26 psi_rad, yaw angle
-    # 27 u_n_mps, axial velocity of CM wrt inertial CS resolved in NED CS
-    # 28 v_n_mps, lateral velocity of CM wrt inertial CS resolved in NED CS
-    # 29 w_n_mps, vertical velocity of CM wrt inertial CS resolved in NED CS
-    # 30 dela_cmd_deg, aileron command
-    # 31 dele_cmd_deg, elevator command
-    # 32 delr_cmd_deg, rudder command
-    # 33 delt_percent, throttle as a percent from 0 to 100.
-    #
-    #==============================================================================
     
     sim_data = eom.post_process(x, t_s, amod, aux_data_accum)
     data_name = 'Simulation'
@@ -153,7 +110,8 @@ def run_job(input_path):
             os.makedirs(data_dir, exist_ok=True)
             save_path = os.path.join(data_dir, f"{job_name}.npz")
             meta = {'job_name': job_name, 'data_name': data_name}
-            np.savez(save_path, data=sim_data, meta=meta)
+            
+            np.savez(save_path, **asdict(sim_data), meta=meta)
             print(f"\n--- Saving Output ---")
             print(f"Data saved to: {save_path}")
 
@@ -191,8 +149,9 @@ if __name__ == "__main__":
     # Allows running via command line: python main.py jobs/x15_descending_turn
     input_path = sys.argv[1] if len(sys.argv) > 1 else "jobs/x15_descending_turn"
     
-    try:
-        run_job(input_path)
-    except Exception as e:
-        print(f"Simulation failed: {e}")
-        sys.exit(1)
+    run_job(input_path)
+    # try:
+    #     run_job(input_path)
+    # except Exception as e:
+    #     print(f"Simulation failed: {e}")
+    #     sys.exit(1)
