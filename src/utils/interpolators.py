@@ -1,217 +1,105 @@
 import numpy as np
 from numba import njit
 
-# @njit
+@njit
 def fastInterp1(x, y, xi):
     """
-    Performs linear interpolation for a given data set.
-
-    Args:
-        x: Array of independent data points.
-        y: Array of dependent data points.
-        xi: Scalar value to interpolate.
-
-    Returns:
-        yi: Interpolated dependent data value for xi.
+    Numba-optimized 1D linear interpolation.
+    Assumes x and y are flat 1D numpy arrays of equal length.
     """
+    if xi <= x[0]:
+        return y[0]
+    elif xi >= x[-1]:
+        return y[-1]
+    
+    # searchsorted finds index i such that x[i-1] < xi <= x[i]
+    i = np.searchsorted(x, xi, side='left')
+    
+    x0, x1 = x[i-1], x[i]
+    y0, y1 = y[i-1], y[i]
+    
+    return (y0 * (x1 - xi) + y1 * (xi - x0)) / (x1 - x0)
 
-    # Ensure x is a column vector
-    x = x.reshape(-1, 1) 
 
-    # Check if lengths of x and y match
-    if len(x) != len(y):
-        raise ValueError("Lengths of x and y must be equal.")
+@njit
+def get_closest_idx(arr, val, i):
+    """Helper function to find nearest neighbor index without array allocations."""
+    if abs(val - arr[i-1]) <= abs(arr[i] - val):
+        return i - 1
+    return i
 
-    # Create intervals array (updated 10/28)
-    iia = np.array([
-        [ -np.inf, x[0, 0], y[0], y[0], 1],
-        *np.vstack([x[:-1, 0], x[1:, 0], y[:-1], y[1:], 2 * np.ones(len(x) - 1)]).T,
-        [x[-1, 0], np.inf, y[-1], y[-1], 3]]) 
-
-    # Find the relevant interval for xi
-    xyc = iia[ (xi > iia[:, 0]) & (xi <= iia[:, 1]) , :]
-
-    # Extract data from the interval
-    x0 = xyc[0,0] 
-    x1 = xyc[0,1]
-    y0 = xyc[0,2]
-    y1 = xyc[0,3]
-    ic = xyc[0,4]
-
-    # Perform interpolation based on the code
-    if ic == 2:
-        yi = (y0 * (x1 - xi) + y1 * (xi - x0)) / (x1 - x0)
-    elif ic == 1:
-        yi = y0
-    elif ic == 3:
-        yi = y1
-    else:
-        raise RuntimeError("Interpolation failure.")
-
-    return yi
-
-# @njit
+@njit
 def fastInterp2(x, y, z, xi, yi):
     """
-    fastInterp2(x, y, z, xi, yi) is a bilinear interpolator 
-    that takes in x and y as vectors, z as a matrix, and xi and yi as 
-    scalar independent data values to determine the dependent data value, zi.
-
-    x - vector of length n
-    y - vector of length m
-    z - 2D numpy array of size n by m 
-
-    This interpolator performs a linear interpolation within the domain of 
-    data x and y. If xi, yi is outside this domain, the value of z(x,y) at the
-    nearest neighboring (x,y) point is assigned.
-    
-    This bilinear interpolator uses the weighted mean approach.
+    Numba-optimized bilinear interpolation with custom nearest-neighbor boundary logic.
+    Assumes x and y are flat 1D arrays, z is a 2D array of shape (len(x), len(y)).
     """
-    
-    # Ensure x and y are column vectors (converts to 2D arrays)
-    x = x.reshape(-1, 1)
-    y = y.reshape(-1, 1) 
-    
-    # Get number of rows (nz) and columns (mz), and lengths of x and y
-    nz = z.shape[0]
-    mz = z.shape[1]
-    lx = len(x)
-    ly = len(y)
-    
-    # Check if lengths of x and y match z
-    if lx != nz:
-        raise ValueError("Length of x and number of rows in z must be equal.")
-    
-    if ly != mz:
-        raise ValueError("Length of y and number of columns in z must be equal.")
-    
-    # Create interval arrays
-    ix = np.array([
-        [ -np.inf, x[0, 0], 1],
-        *np.vstack([x[:-1, 0], x[1:, 0], 2*np.ones(lx - 1)]).T,
-        [x[-1, 0], np.inf, 3]]) 
-    
-    iy = np.array([
-        [ -np.inf, y[0, 0], 1],
-        *np.vstack([y[:-1, 0], y[1:, 0], 2*np.ones(ly - 1)]).T,
-        [y[-1, 0], np.inf, 3]]) 
-    
-    # Construct logical vectors to select appropriate x, y, and z data
-    x_logic = (xi > ix[:, 0]) & (xi <= ix[:, 1])
-    y_logic = (yi > iy[:, 0]) & (yi <= iy[:, 1])
-    
-    x_logic_shifted = np.roll(x_logic, -1)
-    y_logic_shifted = np.roll(y_logic, -1)
-    
-    # Find the relevant interval for xi and yi
-    xic = ix[ x_logic , :]
-    x0 = xic[0,0]
-    x1 = xic[0,1]
-    
-    yic = iy[ y_logic , :]
-    y0 = yic[0,0]
-    y1 = yic[0,1]
+    nx = len(x)
+    ny = len(y)
 
-    # Specify indices to select appropriate z data
-    if (xic[0,2] == 2) & (yic[0,2] == 2):
-        
-        # Get x and y indices in z that bound the data point xi, yj
-        i   = np.where(x_logic)[0][0]
-        im1 = i-1
-        j   = np.where(y_logic)[0][0]
-        jm1 = j-1
-        
-        # Get z at all four vertices
-        z0 = z[im1,   j]
-        z1 = z[  i,   j]
-        z2 = z[im1, jm1]
-        z3 = z[  i, jm1]
-        
-        # Compute denominator of N coefficients
-        den = (x1 - x0)*(y1 - y0)
-
-        # Compute N coefficients
-        Na = (x1 - xi)*(yi - y0)/den
-        Nb = (xi - x0)*(yi - y0)/den
-        Nc = (x1 - xi)*(y1 - yi)/den
-        Nd = (xi - x0)*(y1 - yi)/den
-
-        # Interpolate
-        zi = z0*Na + z1*Nb + z2*Nc + z3*Nd
-        
-    elif (xic[0,2] == 1) & (yic[0,2] == 1):
-        
-        # Select corner point as point closest to (xi,yi)
-        zi = z[0,0]
-        
-    elif (xic[0,2] == 1) & (yic[0,2] == 2):
-        
-        # Find y index that corresponds to closest point
-        y_idx = nnidx(y0, y1, yi, ly, y_logic)
-        
-        # Select z value closest to point (xi,yi)
-        zi = z[0, y_idx].item()
-        
-    elif (xic[0,2] == 1) & (yic[0,2] == 3):
-        
-        # Select corner point as point closest to (xi,yi)
-        zi = z[0, -1].item()
-        
-    elif (xic[0,2] == 2) & (yic[0,2] == 1):
-        
-        # Find x index that corresponds to closest point
-        x_idx = nnidx(x0, x1, xi, lx, x_logic)
-        
-        # Select z value closest to point (xi,yi)
-        zi = z[x_idx, 0].item()
-        
-    elif (xic[0,2] == 2) & (yic[0,2] == 3):
-        
-        # Find y index that corresponds to closest point
-        x_idx = nnidx(x0, x1, xi, lx, x_logic)
-        
-        # Select z value closest to point (xi,yi)
-        zi = z[x_idx, -1].item()
-        
-    elif (xic[0,2] == 3) & (yic[0,2] == 1):
-        
-        # Select corner point as point closest to (xi,yi)
-        zi = z[-1, 0].item()
-        
-    elif (xic[0,2] == 3) & (yic[0,2] == 2):
-        
-        # Find y index that corresponds to closest point
-        y_idx = nnidx(y0, y1, yi, ly, y_logic)
-        
-        # Select z value closest to point (xi,yi)
-        zi = z[-1, y_idx].item()
-        
-    elif (xic[0,2] == 3) & (yic[0,2] == 3):
-        
-        # Select corner point as point closest to (xi,yi)
-        zi = z[-1, -1].item()
-        
+    # Determine X status and interval index
+    if xi <= x[0]:
+        x_status = 1
+        i = 1 
+    elif xi >= x[-1]:
+        x_status = 3
+        i = nx - 1 
     else:
+        x_status = 2
+        i = np.searchsorted(x, xi, side='left')
+
+    # Determine Y status and interval index
+    if yi <= y[0]:
+        y_status = 1
+        j = 1
+    elif yi >= y[-1]:
+        y_status = 3
+        j = ny - 1
+    else:
+        y_status = 2
+        j = np.searchsorted(y, yi, side='left')
+
+    # Status 2,2: Inside domain - Bilinear Interpolation
+    if x_status == 2 and y_status == 2:
+        x0, x1 = x[i-1], x[i]
+        y0, y1 = y[j-1], y[j]
         
-        print('2D interpolator error: incorrect or missing boundary code')
+        z00 = z[i-1, j-1]
+        z10 = z[i, j-1]
+        z01 = z[i-1, j]
+        z11 = z[i, j]
+        
+        den = (x1 - x0) * (y1 - y0)
+        
+        w00 = (x1 - xi) * (y1 - yi) / den
+        w10 = (xi - x0) * (y1 - yi) / den
+        w01 = (x1 - xi) * (yi - y0) / den
+        w11 = (xi - x0) * (yi - y0) / den
+        
+        return z00 * w00 + z10 * w10 + z01 * w01 + z11 * w11
 
-    return zi
-
-# @njit
-def nnidx(p0, p1, p_i, lp, p_logic):
-
-    # Compute distances of p0 and p1 to p_i
-    pdist = abs( np.array([[p0, p1]]) - p_i )
-
-    # Tie-breaking: choose the lower index if equidistant
-    closest_index = np.argmin(pdist, axis=1) 
-
-    # Combine indices of y values
-    idx = np.arange(lp+1)
-    idx = idx[p_logic][0]
-    idx = np.array([idx-1, idx])
-
-    # Select y index that corresponds to closest point
-    idx = idx[closest_index]
-
-    return idx
+    # Corner Cases: Pure assignment
+    elif x_status == 1 and y_status == 1:
+        return z[0, 0]
+    elif x_status == 1 and y_status == 3:
+        return z[0, -1]
+    elif x_status == 3 and y_status == 1:
+        return z[-1, 0]
+    elif x_status == 3 and y_status == 3:
+        return z[-1, -1]
+        
+    # Edge Cases: Nearest Neighbor snapping
+    elif x_status == 1 and y_status == 2:
+        y_idx = get_closest_idx(y, yi, j)
+        return z[0, y_idx]
+    elif x_status == 3 and y_status == 2:
+        y_idx = get_closest_idx(y, yi, j)
+        return z[-1, y_idx]
+    elif x_status == 2 and y_status == 1:
+        x_idx = get_closest_idx(x, xi, i)
+        return z[x_idx, 0]
+    elif x_status == 2 and y_status == 3:
+        x_idx = get_closest_idx(x, xi, i)
+        return z[x_idx, -1]
+    
+    raise RuntimeError("2D interpolator error: unhandled boundary case.")
