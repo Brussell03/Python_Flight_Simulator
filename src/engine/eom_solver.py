@@ -202,9 +202,8 @@ class eom_solver:
         alpha_rad = np.zeros_like(u_b_mps)
         alpha_rad = np.arctan2(w_b_mps, u_b_mps)
         
-        beta_rad = np.zeros_like(true_airspeed_mps)
-        safe_vt = true_airspeed_mps != 0
-        beta_rad[safe_vt] = np.arcsin(v_b_mps[safe_vt] / true_airspeed_mps[safe_vt])
+        vt_ratio = np.divide(v_b_mps, true_airspeed_mps, out=np.zeros_like(v_b_mps), where=true_airspeed_mps != 0)
+        beta_rad = np.arcsin(np.clip(vt_ratio, -1.0, 1.0))
         
         # Atmosphere
         cs_mps     = np.array([fastInterp1(amod["alt_m"], amod["c_mps"],     alt) for alt in h_m])
@@ -212,9 +211,7 @@ class eom_solver:
         p_kgpms2   = np.array([fastInterp1(amod["alt_m"], amod["p_Npm2"],    alt) for alt in h_m])
         T_K        = np.array([fastInterp1(amod["alt_m"], amod["T_K"],       alt) for alt in h_m])
         
-        mach = np.zeros_like(cs_mps)
-        safe_c = cs_mps != 0
-        mach[safe_c] = true_airspeed_mps[safe_c] / cs_mps[safe_c]
+        mach = np.divide(true_airspeed_mps, cs_mps, out=np.zeros_like(true_airspeed_mps), where=cs_mps != 0)
         
         # Determine gravity magnitude from Earth model
         g_mag_mps2 = np.zeros(nt)
