@@ -3,7 +3,7 @@ meta:
     description: "Dropped Sphere, wind shear (WGS-84 earth)"
 
 vehicle:
-    model: "NASAAtmos01Sphere"
+    model: "Cannonball"
     overrides:
 
 instructions:
@@ -11,7 +11,7 @@ instructions:
     gravity_type: "J2"
     integrator: "RK45"
     simulate: true
-    compare: false
+    compare: true
     t0_s: 0.0
     tf_s: 30.0
     dt_s: 0.012
@@ -22,15 +22,23 @@ output:
     plots:
         6dof: true
         attitude: true
-        controls: true
+        controls: false
         aerodynamics: true
         geodetic: true
         ned_velocity: true
 
 compare:
-    path: "comparison_data/X15_Stabilizer_Pulse_FT.npz"
+    path: "verification_data"
     save_compare: true
     show_plots: true
+    plot_error: false
+    plots:
+        6dof: true
+        attitude: true
+        controls: false
+        aerodynamics: true
+        geodetic: true
+        ned_velocity: true
 
 initial_conditions:
     h_ft: 30000

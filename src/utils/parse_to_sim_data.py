@@ -172,10 +172,10 @@ def parse_csvs(file_paths, dt=0.01):
     sim_data_kwargs = {field.name: np.full(n_time_bps, np.nan) for field in dataclasses.fields(SimData)}
     sim_data_kwargs['t_s'] = t_common
     
-    print(f"\n--- Interpolating Data to Master Time Vector (dt={dt}s) ---")
+    # print(f"\n--- Interpolating Data to Master Time Vector (dt={dt}s) ---")
     
     for ds in datasets:
-        print(f"Mapping: {ds['col_name']} -> {ds['attr_name']} {ds['msg']}")
+        # print(f"Mapping: {ds['col_name']} -> {ds['attr_name']} {ds['msg']}")
         
         interpolated_data = np.zeros(n_time_bps)
         time_sample = ds['t']
@@ -208,7 +208,7 @@ def parse_all_csvs(input_path, dt=0.01):
     sim_datas = []
     file_names = []
     for file_path in file_paths:
-        print(file_path)
+        # print(file_path)
         sim_datas.append(parse_csvs(file_path, dt))
         file_names.append(file_path.stem)
     

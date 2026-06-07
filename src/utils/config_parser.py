@@ -4,11 +4,10 @@ import numpy as np
 import yaml
 import ussa1976
 
-from models.dave_vehicle import DraglessCannonball, Cannonball, DAVEVehicle
+from models.cannonball.cannonball import DraglessCannonball, Cannonball
+from models.brick.brick import Brick, DraglessBrick
 from src.engine.eom_solver import eom_solver
 from src.environment.earth_model import EarthModel
-from models.bricks.bricks import NASAAtmos02Brick, NASAAtmos03Brick
-from models.spheres.spheres import Blueberry, BowlingBall, Carronade12lb, Musketball50cal, NASAAtmos01Sphere, TsarCannonball
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
 from src.utils.constants import D2R, FT2M
@@ -109,20 +108,10 @@ def load_simulation_config(yaml_path):
         vehicle = DraglessCannonball()
     elif config['vehicle']['model'] == 'Cannonball':
         vehicle = Cannonball()
-    elif config['vehicle']['model'] == 'Carronade12lb':
-        vehicle = Carronade12lb()
-    elif config['vehicle']['model'] == 'Blueberry':
-        vehicle = Blueberry()
-    elif config['vehicle']['model'] == 'BowlingBall':
-        vehicle = BowlingBall()
-    elif config['vehicle']['model'] == 'TsarCannonball':
-        vehicle = TsarCannonball()
-    elif config['vehicle']['model'] == 'NASAAtmos01Sphere':
-        vehicle = NASAAtmos01Sphere()
-    elif config['vehicle']['model'] == 'NASAAtmos02Brick':
-        vehicle = NASAAtmos02Brick()
-    elif config['vehicle']['model'] == 'NASAAtmos03Brick':
-        vehicle = NASAAtmos03Brick()
+    elif config['vehicle']['model'] == 'Dragless Brick':
+        vehicle = DraglessBrick()
+    elif config['vehicle']['model'] == 'Brick':
+        vehicle = Brick()
     elif config['vehicle']['model'] == 'X15':
         vehicle = X15(time_history_path=th_path)
     else:

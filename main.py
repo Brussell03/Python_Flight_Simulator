@@ -140,11 +140,7 @@ def run_job(input_path):
                 plt.close('all')
     
     if instruction_cfg.get('compare', False) and compare_cfg.get('path') is not None:
-        show_plots = compare_cfg.get('show_plots', False)
-        compare_path = resolve_path(job_dir, compare_cfg.get('path'))
-        save_path = os.path.join(job_dir, "output/comparisons/") if compare_cfg.get('save_compare', False) else None
-        plot_error = compare_cfg.get('plot_error', False)
-        compare_data_to_files(sim_dict, compare_path, compare_cfg.get('plots', {}), title_prefix=vehicle.vehicle_name, save_dir=save_path, show_plots=show_plots, plot_error=plot_error)
+        compare_data_to_files(sim_dict, compare_cfg, job_dir, title_prefix=vehicle.vehicle_name)
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py jobs/x15_descending_turn
