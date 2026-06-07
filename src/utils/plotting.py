@@ -9,12 +9,14 @@ class SimulatorPlotter:
     Handles all visual output for the flight simulation.
     Maps data structures to plots using dataclass attributes or dict keys.
     """
-    def __init__(self, dataset_list, title_prefix="", plot_dir=None):
+    def __init__(self, dataset_list, title_prefix="", plot_dir=None, plot_error=False):
         """
         dataset_list: List of dictionaries [{'name': str, 'data': SimData object or npz dict}]
+        plot_error: If True, plots the difference between dataset[i] and dataset[0].
         """
         self.plot_dir = plot_dir
         self.title_prefix = title_prefix + "\n" if title_prefix != "" else ""
+        self.plot_error = plot_error
         
         # If the user passes a single dict, convert it to a list
         if isinstance(dataset_list, dict):
@@ -22,7 +24,6 @@ class SimulatorPlotter:
         
         self.datasets = [self._process_dataset(d) for d in dataset_list]
         self.colors = plt.cm.tab10(np.linspace(0, 1, len(self.datasets)))
-        
         self.save = plot_dir is not None
     
     def _process_dataset(self, item):
@@ -68,6 +69,24 @@ class SimulatorPlotter:
             'throttle': _get_val(data, 'delt_percent')
         }
 
+    def _get_comparison_data(self, idx, key):
+        """
+        Retrieves data for plotting. If plot_error is True, returns (ds[i] - base).
+        Interpolates the base dataset to match current dataset's time vector.
+        """
+        ds = self.datasets[idx]
+        val = ds[key]
+        
+        if not self.plot_error or idx == 0 or val is None:
+            return ds['t'], val
+        
+        # Error calculation mode
+        base = self.datasets[0]
+        # Interpolate base to current dataset's time
+        base_interp = np.interp(ds['t'], base['t'], base[key])
+        
+        return ds['t'], val - base_interp
+
     def _setup_figure(self, title, rows, cols, figsize):
         """Internal helper for centralized figure formatting."""
         fig, axes = plt.subplots(rows, cols, figsize=figsize)
@@ -77,6 +96,10 @@ class SimulatorPlotter:
 
     def _format_ax(self, ax, ylabel, xlabel='Time [s]', equal_aspect=False, min_range=1e-2):
         """Internal helper for clean, dark-mode axis aesthetics and scaling limits."""
+        if self.plot_error:
+            # Inserts ' Error' before the unit bracket
+            ylabel = ylabel.replace(' [', ' Error [')
+        
         ax.set_facecolor('#1E1E1E')
         ax.set_ylabel(ylabel, color='#B0B0B0', fontsize=10)
         ax.set_xlabel(xlabel, color='#B0B0B0', fontsize=10)
@@ -88,22 +111,27 @@ class SimulatorPlotter:
         if equal_aspect:
             ax.set_aspect('equal', adjustable='datalim')
         
-        # Enforce minimum axis ranges to prevent micro-scaling on noise
-        ymin, ymax = ax.get_ylim()
-        if abs(ymax - ymin) < min_range:
-            mid = (ymax + ymin) / 2.0
-            ax.set_ylim(mid - min_range / 2.0, mid + min_range / 2.0)
-            
-        xmin, xmax = ax.get_xlim()
-        if abs(xmax - xmin) < min_range:
-            mid = (xmax + xmin) / 2.0
-            ax.set_xlim(mid - min_range / 2.0, mid + min_range / 2.0)
+        if not self.plot_error:
+            # Enforce minimum axis ranges to prevent micro-scaling on noise
+            ymin, ymax = ax.get_ylim()
+            if abs(ymax - ymin) < min_range:
+                mid = (ymax + ymin) / 2.0
+                ax.set_ylim(mid - min_range / 2.0, mid + min_range / 2.0)
+                
+            xmin, xmax = ax.get_xlim()
+            if abs(xmax - xmin) < min_range:
+                mid = (xmax + xmin) / 2.0
+                ax.set_xlim(mid - min_range / 2.0, mid + min_range / 2.0)
     
     def _plot_all_time(self, ax, key):
         """Helper to loop through all loaded datasets, skipping None and NaN arrays."""
         for i, ds in enumerate(self.datasets):
-            if key and ds[key] is not None and not np.all(np.isnan(ds[key])):
-                ax.plot(ds['t'], ds[key], color=self.colors[i], linewidth=1.2, label=ds['name'])
+            if self.plot_error and i == 0:
+                continue
+            
+            t, val = self._get_comparison_data(i, key)
+            if val is not None and not np.all(np.isnan(val)):
+                ax.plot(t, val, color=self.colors[i], linewidth=1.2, label=ds['name'])
         
         # Only draw legend if there are items to show
         handles, labels = ax.get_legend_handles_labels()
@@ -113,8 +141,14 @@ class SimulatorPlotter:
     def _plot_all(self, ax, keyX, keyY):
         """Helper to loop through all loaded datasets, skipping None and NaN arrays."""
         for i, ds in enumerate(self.datasets):
-            if keyX and keyY and ds[keyX] is not None and ds[keyY] is not None and not np.all(np.isnan(ds[keyX])) and not np.all(np.isnan(ds[keyY])):
-                ax.plot(ds[keyX], ds[keyY], color=self.colors[i], linewidth=1.2, label=ds['name'])
+            if self.plot_error and i == 0:
+                continue
+            
+            _, x_val = self._get_comparison_data(i, keyX)
+            _, y_val = self._get_comparison_data(i, keyY)
+            
+            if x_val is not None and y_val is not None and not np.all(np.isnan(x_val)) and not np.all(np.isnan(y_val)):
+                ax.plot(x_val, y_val, color=self.colors[i], linewidth=1.2, label=self.datasets[i]['name'])
         
         handles, labels = ax.get_legend_handles_labels()
         if handles and len(self.datasets) > 1:
@@ -210,6 +244,9 @@ class SimulatorPlotter:
             
             # Iterate through all loaded datasets
             for ds_idx, ds in enumerate(self.datasets):
+                if self.plot_error and ds_idx == 0:
+                    continue # Skip base
+                    
                 color = self.colors[ds_idx]
                 
                 # Plot Achieved (Solid, Dataset Color)
@@ -255,7 +292,7 @@ class SimulatorPlotter:
         # Ground Track Plot
         ax_track = ax_flat[3]
         self._plot_gradient_track(ax_track, 'lon', 'lat')
-        self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]', equal_aspect=True)
+        self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]', equal_aspect=True, min_range=1e-5)
         
         plt.tight_layout()
         if self.save: plt.savefig(os.path.join(self.plot_dir, filename), facecolor=fig.get_facecolor(), dpi=150)

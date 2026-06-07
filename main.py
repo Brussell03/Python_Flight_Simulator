@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from src.engine.compare_data import compare_data_to_file
+from src.engine.compare_data import compare_data_to_files
 from src.utils.config_parser import load_simulation_config, resolve_path
 from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
@@ -143,7 +143,8 @@ def run_job(input_path):
         show_plots = compare_cfg.get('show_plots', False)
         compare_path = resolve_path(job_dir, compare_cfg.get('path'))
         save_path = os.path.join(job_dir, "output/comparisons/") if compare_cfg.get('save_compare', False) else None
-        compare_data_to_file(sim_dict, title_prefix=vehicle.vehicle_name, file_path=compare_path, save_dir=save_path, show_plots=show_plots)
+        plot_error = compare_cfg.get('plot_error', False)
+        compare_data_to_files(sim_dict, compare_path, compare_cfg.get('plots', {}), title_prefix=vehicle.vehicle_name, save_dir=save_path, show_plots=show_plots, plot_error=plot_error)
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py jobs/x15_descending_turn

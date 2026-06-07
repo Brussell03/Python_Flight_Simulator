@@ -10,7 +10,7 @@ from src.engine.sim_data import SimData
 from src.utils.interpolators import fastInterp1
 from src.utils.constants import D2R, FT2M, R2D
 
-# Map column headers directly to SimData attribute names instead of obsolete integer indices
+# Map column headers directly to SimData attribute names
 COLUMN_MAP = {
     'u_mps_vs_time_s': 'u_b_mps', 'v_mps_vs_time_s': 'v_b_mps', 'w_mps_vs_time_s': 'w_b_mps',
     'p_rps_vs_time_s': 'p_b_rps', 'q_rps_vs_time_s': 'q_b_rps', 'r_rps_vs_time_s': 'r_b_rps',
@@ -51,7 +51,7 @@ def get_unit_conversion(col_name, attr_name):
         conversion_msg = "(Converted ft -> m)"
         
     # Angles
-    rad_attrs = {'p_b_rps', 'q_b_rps', 'r_b_rps', 'lat_rad', 'long_rad', 
+    rad_attrs = {'p_b_rps', 'q_b_rps', 'r_b_rps', 'lat_rad', 'long_rad',
                  'alpha_rad', 'beta_rad', 'phi_rad', 'theta_rad', 'psi_rad',
                  'p_nb_rps', 'q_nb_rps', 'r_nb_rps', 'phi_dot_rps', 'theta_dot_rps', 'psi_dot_rps'}
     

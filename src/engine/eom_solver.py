@@ -4,7 +4,7 @@ import numpy as np
 from src.engine.sim_data import SimData
 from src.utils.interpolators import fastInterp1
 from src.control.open_loop_control import open_loop_speed_brake, open_loop_throttle
-from src.utils.kinematics import ecef_to_ned_dcm, quat_body_to_nav, quaternion_derivative, wind_to_body_dcm
+from src.utils.kinematics import ecef_to_ned_dcm, quat_to_dcm, quaternion_derivative, wind_to_body_dcm
 
 class eom_solver:
     def __init__(self, earth_model):
@@ -19,6 +19,9 @@ class eom_solver:
         x_e_m, y_e_m, z_e_m = x[10], x[11], x[12]
         dela_ach_deg, dele_ach_deg, delr_ach_deg = x[13], x[14], x[15]
         m_fuel_kg = x[16]
+        
+        norm = math.sqrt(q_b2e[0]**2 + q_b2e[1]**2 + q_b2e[2]**2 + q_b2e[3]**2)
+        q_b2e = q_b2e/norm
 
         # Vehicle Mass State Interface
         m_total_kg = vehicle.m_dry_kg + m_fuel_kg
@@ -65,7 +68,7 @@ class eom_solver:
 
         # Kinematics Interface
         C_w2b = wind_to_body_dcm(alpha_rad, beta_rad)
-        C_b2e = quat_body_to_nav(*q_b2e)
+        C_b2e = quat_to_dcm(*q_b2e)
         C_e2b = C_b2e.T
 
         # Gravity & Earth Rates
@@ -78,7 +81,7 @@ class eom_solver:
                                                                                                                     p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
                                                                                                                     delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake)
 
-        # omega_ib_b is the inertial body rate. The Coriolis acceleration for 
+        # omega_ib_b_rps is the inertial body rate. The Coriolis acceleration for 
         # Earth-relative velocity tracked in the body frame requires (omega_ib + omega_ie) x V
         omega_ib_b_rps = np.array([p_b_rps, q_b_rps, r_b_rps])
         omega_cor_b_rps = omega_ib_b_rps + omega_ie_b_rps
@@ -89,19 +92,22 @@ class eom_solver:
         dx[2] = (Fz_b_kgmps2 / m_total_kg) + g_b_mps2[2] - (omega_cor_b_rps[0]*v_b_mps - omega_cor_b_rps[1]*u_b_mps)
 
         # Inertia Derivatives via Vehicle Method
-        dm_kg = 1.0
-        m_plus = np.clip(m_total_kg + dm_kg, vehicle.m_dry_kg, vehicle.m_wet_kg)
-        m_minus = np.clip(m_total_kg - dm_kg, vehicle.m_dry_kg, vehicle.m_wet_kg)
-        dm_diff = m_plus - m_minus
+        if (m_fuel_dot_kgps != 0):
+            dm_kg = 1.0
+            m_plus = np.clip(m_total_kg + dm_kg, vehicle.m_dry_kg, vehicle.m_wet_kg)
+            m_minus = np.clip(m_total_kg - dm_kg, vehicle.m_dry_kg, vehicle.m_wet_kg)
+            dm_diff = m_plus - m_minus
 
-        if dm_diff > 0:
-            J_plus = vehicle.get_mass_properties(m_plus)
-            J_minus = vehicle.get_mass_properties(m_minus)
-            dJ_dm = [(p - m) / dm_diff for p, m in zip(J_plus, J_minus)]
+            if dm_diff > 0:
+                J_plus = vehicle.get_mass_properties(m_plus)
+                J_minus = vehicle.get_mass_properties(m_minus)
+                dJ_dm = [(p - m) / dm_diff for p, m in zip(J_plus, J_minus)]
+            else:
+                dJ_dm = [0.0, 0.0, 0.0, 0.0]
+
+            Jxx_dot, Jyy_dot, Jzz_dot, Jxz_dot = [dJ * -m_fuel_dot_kgps for dJ in dJ_dm]
         else:
-            dJ_dm = [0.0, 0.0, 0.0, 0.0]
-
-        Jxx_dot, Jyy_dot, Jzz_dot, Jxz_dot = [dJ * -m_fuel_dot_kgps for dJ in dJ_dm]
+            Jxx_dot, Jyy_dot, Jzz_dot, Jxz_dot = 0, 0, 0, 0
 
         # Rotational Dynamics
         hx_b_kgm2ps = Jxx_b_kgm2 * p_b_rps - Jxz_b_kgm2 * r_b_rps
@@ -194,8 +200,7 @@ class eom_solver:
         true_airspeed_mps = np.sqrt(u_b_mps**2 + v_b_mps**2 + w_b_mps**2)
         
         alpha_rad = np.zeros_like(u_b_mps)
-        safe_u = u_b_mps != 0
-        alpha_rad[safe_u] = np.arctan(w_b_mps[safe_u] / u_b_mps[safe_u])
+        alpha_rad = np.arctan2(w_b_mps, u_b_mps)
         
         beta_rad = np.zeros_like(true_airspeed_mps)
         safe_vt = true_airspeed_mps != 0
@@ -221,7 +226,7 @@ class eom_solver:
         u_n_mps, v_n_mps, w_n_mps = np.zeros(nt), np.zeros(nt), np.zeros(nt)
         
         for i in range(nt):
-            C_b2e = quat_body_to_nav(q0[i], q1[i], q2[i], q3[i])
+            C_b2e = quat_to_dcm(q0[i], q1[i], q2[i], q3[i])
             C_e2n = ecef_to_ned_dcm(lat_rad[i], long_rad[i])
             
             # Form standard C_b2n to recover flight mechanics parameters

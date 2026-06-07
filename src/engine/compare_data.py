@@ -1,9 +1,11 @@
 import argparse
 import os
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.utils.plotting import SimulatorPlotter # Adjust import path as needed
+from src.utils.plotting import SimulatorPlotter
+from src.utils.parse_to_sim_data import parse_all_csvs
 
 def load_npz(file_path):
     """Loads npz and extracts individual SimData arrays and meta."""
@@ -45,24 +47,27 @@ def compare_data(file_paths, save_plots=False):
     # Block execution until user closes all plot windows
     plt.show(block=True)
 
-def compare_data_to_file(dataset, file_path, title_prefix="", save_dir=None, show_plots=False):
-    """Loads dataset and plots it with provided dataset."""
+def compare_data_to_files(dataset, compare_path, plot_cfg, title_prefix="", save_dir=None, show_plots=False, plot_error=False):
+    """Loads datasets and plots them with provided dataset."""
+    datasets = [dataset]
+    sim_datas, file_names = parse_all_csvs(compare_path)
     
-    datasets = [dataset, load_npz(file_path)]
+    for i in range(len(sim_datas)):
+        datasets.append({'name': file_names[i], 'data': sim_datas[i]})
 
     # Setup the output directory
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
     
-    plotter = SimulatorPlotter(datasets, title_prefix=title_prefix, plot_dir=save_dir)
+    plotter = SimulatorPlotter(datasets, title_prefix=title_prefix, plot_dir=save_dir, plot_error=plot_error)
 
     # Render and display the plots
-    plotter.plot_6dof(show=show_plots)
-    plotter.plot_attitude(show=show_plots)
-    plotter.plot_controls(show=show_plots)
-    plotter.plot_aerodynamics(show=show_plots)
-    plotter.plot_geodetic(show=show_plots)
-    plotter.plot_ned_velocity(show=show_plots)
+    if plot_cfg.get('6dof', False):         plotter.plot_6dof(show=show_plots)
+    if plot_cfg.get('attitude', False):     plotter.plot_attitude(show=show_plots)
+    if plot_cfg.get('controls', False):     plotter.plot_controls(show=show_plots)
+    if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics(show=show_plots)
+    if plot_cfg.get('geodetic', False):     plotter.plot_geodetic(show=show_plots)
+    if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity(show=show_plots)
     
     # Block execution until user closes all plot windows
     if show_plots: plt.show(block=True)

@@ -3,7 +3,7 @@ import numpy as np
 from numba import njit
 
 @njit
-def quat_body_to_nav(q0, q1, q2, q3):
+def quat_to_dcm(q0, q1, q2, q3):
     """Converts unit quaternion to Direction Cosine Matrix (Body to Nav)."""
     C11 = q0**2 + q1**2 - q2**2 - q3**2
     C12 = 2 * (q1*q2 - q0*q3)
@@ -18,6 +18,48 @@ def quat_body_to_nav(q0, q1, q2, q3):
         [C11, C12, C13],
         [C21, C22, C23],
         [C31, C32, C33]
+    ], dtype=np.float64)
+
+@njit
+def dcm_to_quat(C: np.ndarray) -> np.ndarray:
+    """
+    Robustly converts a DCM to a Quaternion [q0, q1, q2, q3] directly 
+    matching the convention of quat_body_to_nav with strict sign consistency.
+    """
+    trace = np.trace(C)
+    if trace > 0.0:
+        s = 0.5 / math.sqrt(trace + 1.0)
+        return np.array([
+            0.25 / s,
+            (C[2, 1] - C[1, 2]) * s,
+            (C[0, 2] - C[2, 0]) * s,
+            (C[1, 0] - C[0, 1]) * s
+        ], dtype=np.float64)
+    
+    if C[0, 0] > C[1, 1] and C[0, 0] > C[2, 2]:
+        s = 2.0 * math.sqrt(1.0 + C[0, 0] - C[1, 1] - C[2, 2])
+        return np.array([
+            (C[2, 1] - C[1, 2]) / s,
+            0.25 * s,
+            (C[0, 1] + C[1, 0]) / s,
+            (C[0, 2] + C[2, 0]) / s
+        ], dtype=np.float64)
+    
+    if C[1, 1] > C[2, 2]:
+        s = 2.0 * math.sqrt(1.0 + C[1, 1] - C[0, 0] - C[2, 2])
+        return np.array([
+            (C[0, 2] - C[2, 0]) / s,
+            (C[0, 1] + C[1, 0]) / s,
+            0.25 * s,
+            (C[1, 2] + C[2, 1]) / s
+        ], dtype=np.float64)
+    
+    s = 2.0 * math.sqrt(1.0 + C[2, 2] - C[0, 0] - C[1, 1])
+    return np.array([
+        (C[1, 0] - C[0, 1]) / s,
+        (C[0, 2] + C[2, 0]) / s,
+        (C[1, 2] + C[2, 1]) / s,
+        0.25 * s
     ], dtype=np.float64)
 
 @njit
@@ -62,27 +104,3 @@ def quaternion_derivative(q: np.ndarray, omega_rps: np.ndarray, k_quat: float = 
     dq3 =  0.5 * (r*q0 - p*q2 + q_rate*q1) + k_quat * q_err * q3
     
     return np.array([dq0, dq1, dq2, dq3], dtype=np.float64)
-
-@njit
-def dcm_to_quat(C: np.ndarray) -> np.ndarray:
-    """Robustly converts a Direction Cosine Matrix to a Quaternion [q0, q1, q2, q3]."""
-    trace = np.trace(C)
-    if trace > 0:
-        s = 0.5 / math.sqrt(trace + 1.0)
-        return np.array([
-            0.25 / s,
-            (C[1, 2] - C[2, 1]) * s,
-            (C[2, 0] - C[0, 2]) * s,
-            (C[0, 1] - C[1, 0]) * s
-        ], dtype=np.float64)
-    
-    if C[0, 0] > C[1, 1] and C[0, 0] > C[2, 2]:
-        s = 2.0 * math.sqrt(1.0 + C[0, 0] - C[1, 1] - C[2, 2])
-        return np.array([(C[1, 2] - C[2, 1]) / s, 0.25 * s, (C[0, 1] + C[1, 0]) / s, (C[0, 2] + C[2, 0]) / s], dtype=np.float64)
-    
-    if C[1, 1] > C[2, 2]:
-        s = 2.0 * math.sqrt(1.0 + C[1, 1] - C[0, 0] - C[2, 2])
-        return np.array([(C[2, 0] - C[0, 2]) / s, (C[0, 1] + C[1, 0]) / s, 0.25 * s, (C[1, 2] + C[2, 1]) / s], dtype=np.float64)
-    
-    s = 2.0 * math.sqrt(1.0 + C[2, 2] - C[0, 0] - C[1, 1])
-    return np.array([(C[0, 1] - C[1, 0]) / s, (C[0, 2] + C[2, 0]) / s, (C[1, 2] + C[2, 1]) / s, 0.25 * s], dtype=np.float64)

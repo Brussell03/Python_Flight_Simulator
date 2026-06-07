@@ -1,5 +1,7 @@
 import numpy as np
+from numba import njit
 
+# @njit
 def fastInterp1(x, y, xi):
     """
     Performs linear interpolation for a given data set.
@@ -48,6 +50,7 @@ def fastInterp1(x, y, xi):
 
     return yi
 
+# @njit
 def fastInterp2(x, y, z, xi, yi):
     """
     fastInterp2(x, y, z, xi, yi) is a bilinear interpolator 
@@ -194,6 +197,7 @@ def fastInterp2(x, y, z, xi, yi):
 
     return zi
 
+# @njit
 def nnidx(p0, p1, p_i, lp, p_logic):
 
     # Compute distances of p0 and p1 to p_i

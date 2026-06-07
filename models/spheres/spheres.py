@@ -95,9 +95,6 @@ class BallisticSphere(Vehicle):
 
     # --- 6DOF Control Loop Compatibility Interface (Stubs) ---
     def get_engine_burn_rate(self, throttle_perc): return 0.0
-    def pitch_control(self, t_s, q_b_rps, cmod): return 0.0
-    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod): return 0.0
-    def yaw_control(self, t_s, r_b_rps, cmod): return 0.0
     def get_sas_commands(self, t, x, cmod, u_trim): return 0.0, 0.0, 0.0
     
     def aileron_kinematics(self, dela_cmd_deg, dela_ach_deg): return 0.0

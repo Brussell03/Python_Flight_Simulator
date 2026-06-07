@@ -23,46 +23,46 @@
     </description>
 
 
-    <modificationRecord modID="B">
+    <modificationRecord modID="B" date="2012-11-01">
       <author name="Bruce Jackson" org="NASA Langley Research Center" 
-	      email="bruce.jackson@nasa.gov">
-	<address>MS 132 NASA, Hampton, VA 23681</address>
+        email="bruce.jackson@nasa.gov">
+        <address>MS 132 NASA, Hampton, VA 23681</address>
       </author>
       <description>
-	Immediately after releasing mod A, noticed the description was wrong
+        Immediately after releasing mod A, noticed the description was wrong
       </description>
     </modificationRecord>
 
-    <modificationRecord modID="C">
+    <modificationRecord modID="C" date="2013-01-15">
       <author name="Bruce Jackson" org="NASA Langley Research Center" 
-	      email="bruce.jackson@nasa.gov">
-	<address>MS 132 NASA, Hampton, VA 23681</address>
+        email="bruce.jackson@nasa.gov">
+        <address>MS 132 NASA, Hampton, VA 23681</address>
       </author>
       <description>
-	Added reference area output value
+        Added reference area output value
       </description>
     </modificationRecord>
 
-    <modificationRecord modID="D">
+    <modificationRecord modID="D" date="2013-03-10">
       <author name="Bruce Jackson" org="NASA Langley Research Center" 
-	      email="bruce.jackson@nasa.gov">
-	<address>MS 132 NASA, Hampton, VA 23681</address>
+        email="bruce.jackson@nasa.gov">
+        <address>MS 132 NASA, Hampton, VA 23681</address>
       </author>
       <description>
-	Corrected reference area output value, thanks to alert reader
-	Deleena Noble at DFRC
+        Corrected reference area output value, thanks to alert reader
+        Deleena Noble at DFRC
       </description>
     </modificationRecord>
 
-    <modificationRecord modID="E">
+    <modificationRecord modID="E" date="2013-04-19">
       <author name="Bruce Jackson" org="NASA Langley Research Center" 
-	      email="bruce.jackson@nasa.gov">
-	<address>MS 132 NASA, Hampton, VA 23681</address>
+        email="bruce.jackson@nasa.gov">
+        <address>MS 132 NASA, Hampton, VA 23681</address>
       </author>
       <description>
-	Corrected reference area output value again; was using surface
-	area equation! Also increased damping to make terminal
-	velocity realistic.
+        Corrected reference area output value again; was using surface
+        area equation! Also increased damping to make terminal
+        velocity realistic.
       </description>
     </modificationRecord>
 

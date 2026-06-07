@@ -23,7 +23,7 @@ class X15(Vehicle):
         # Geometry
         self.b_m = 22.36 * FT2M
         self.c_m = 10.27 * FT2M
-        self.A_ref_m2 = 18.6
+        self.S_ref_m2 = 18.6
         
         # Actuation Time Constants (First-order lag)
         self.tau_a_s = 0.1
@@ -238,10 +238,10 @@ class X15(Vehicle):
         Cnr_prps += -0.02 * throttle_perc
 
         # Dimensional Wind-Axis Forces
-        drag_kgmps2 = CD_X15(CDwb, self.CDdele_pdeg, self.CDdelsb_pdeg, dele_ach_deg, delsb_deg) * qbar_kgpms2 * self.A_ref_m2
-        lift_kgmps2 = CL_X15(CLwb, self.CLalpha_pdeg, CLdele_pdeg, alpha_deg, dele_ach_deg) * qbar_kgpms2 * self.A_ref_m2
+        drag_kgmps2 = CD_X15(CDwb, self.CDdele_pdeg, self.CDdelsb_pdeg, dele_ach_deg, delsb_deg) * qbar_kgpms2 * self.S_ref_m2
+        lift_kgmps2 = CL_X15(CLwb, self.CLalpha_pdeg, CLdele_pdeg, alpha_deg, dele_ach_deg) * qbar_kgpms2 * self.S_ref_m2
         side_kgmps2 = CY_X15(CYbeta_prad, CYp_prps, CYr_prps, self.CYbetadot_pdps, CYdela_pdeg, CYdelr_pdeg, 
-                             beta_rad, p_b_rps, r_b_rps, betadot_rps, dela_ach_deg, delr_ach_deg, true_airspeed_mps, self.b_m) * qbar_kgpms2 * self.A_ref_m2
+                             beta_rad, p_b_rps, r_b_rps, betadot_rps, dela_ach_deg, delr_ach_deg, true_airspeed_mps, self.b_m) * qbar_kgpms2 * self.S_ref_m2
         
         # Transform Forces to Body Frame using provided C_w2b DCM
         Fx_b_kgmps2 = -C_w2b[0,0]*drag_kgmps2 + C_w2b[0,1]*side_kgmps2 - C_w2b[0,2]*lift_kgmps2
@@ -250,13 +250,13 @@ class X15(Vehicle):
 
         # Dimensional Body-Axis Moments
         l_b_kgm2ps2 = Cl_X15(Clbeta_prad, Clp_prps, Clr_prps, self.Clbetadot_pdps, Cldela_pdeg, Cldelr_pdeg, 
-                             beta_rad, betadot_rps, p_b_rps, r_b_rps, dela_ach_deg, delr_ach_deg, true_airspeed_mps, self.b_m) * qbar_kgpms2 * self.A_ref_m2 * self.b_m
+                             beta_rad, betadot_rps, p_b_rps, r_b_rps, dela_ach_deg, delr_ach_deg, true_airspeed_mps, self.b_m) * qbar_kgpms2 * self.S_ref_m2 * self.b_m
         
         m_b_kgm2ps2 = Cm_X15(Cm, self.Cmalpha_pdeg, Cmq_prps, self.Cmalphadot_prps, Cmdele_pdeg, self.Cmdelsb_pdeg, 
-                             alpha_deg, alphadot_rps, q_b_rps, dele_ach_deg, delsb_deg, true_airspeed_mps, self.c_m) * qbar_kgpms2 * self.A_ref_m2 * self.c_m
+                             alpha_deg, alphadot_rps, q_b_rps, dele_ach_deg, delsb_deg, true_airspeed_mps, self.c_m) * qbar_kgpms2 * self.S_ref_m2 * self.c_m
         
         n_b_kgm2ps2 = Cn_X15(Cnbeta_prad, Cnp_prps, Cnr_prps, self.Cnbetadot_pdps, Cndela_pdeg, Cndelr_pdeg, 
-                             beta_rad, betadot_rps, p_b_rps, r_b_rps, dela_ach_deg, delr_ach_deg, true_airspeed_mps, self.b_m) * qbar_kgpms2 * self.A_ref_m2 * self.b_m
+                             beta_rad, betadot_rps, p_b_rps, r_b_rps, dela_ach_deg, delr_ach_deg, true_airspeed_mps, self.b_m) * qbar_kgpms2 * self.S_ref_m2 * self.b_m
 
         return Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2
     
