@@ -48,7 +48,7 @@ def compare_data(file_paths, save_plots=False):
     # Block execution until user closes all plot windows
     plt.show(block=True)
 
-def compare_data_to_files(dataset, compare_cfg, job_dir, title_prefix=""):
+def compare_data_to_files(dataset, compare_cfg, job_dir, title_prefix="", wind_model=None):
     """Loads datasets and plots them with provided dataset."""
     
     compare_path = resolve_path(job_dir, compare_cfg.get('path'))
@@ -60,7 +60,7 @@ def compare_data_to_files(dataset, compare_cfg, job_dir, title_prefix=""):
     save_dir = os.path.join(job_dir, "output/comparisons/") if compare_cfg.get('save_compare', False) else None
     
     datasets = [dataset]
-    sim_datas, file_names = parse_all_csvs(compare_path)
+    sim_datas, file_names = parse_all_csvs(compare_path, wind_model=wind_model)
     
     for i in range(len(sim_datas)):
         datasets.append({'name': file_names[i], 'data': sim_datas[i]})

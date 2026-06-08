@@ -8,6 +8,7 @@ from models.cannonball.cannonball import DraglessCannonball, Cannonball
 from models.brick.brick import Brick, DraglessBrick
 from src.engine.eom_solver import eom_solver
 from src.environment.earth_model import EarthModel
+from src.environment.wind_model import WindModel
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
 from src.utils.constants import D2R, FT2M
@@ -19,7 +20,7 @@ def resolve_path(base_dir, path):
         return os.path.join(base_dir, path)
     return path
 
-def get_unified_value(config_dict, base_name, to_si_factor):
+def get_si_value(config_dict, base_name, to_si_factor):
     """
     Retrieves a configuration value and converts it to SI units.
     Raises ValueError if both _deg/_rad or _fps/_mps variants are provided.
@@ -94,6 +95,7 @@ def load_simulation_config(yaml_path):
     init_cond_cfg = config.get('initial_conditions', {})
     trim_cfg = config.get('trim', {})
     control_cfg = config.get('control', {})
+    wind_cfg = config.get('wind', {})
     
     # Resolve Path for Control Input
     th_path = None
@@ -130,16 +132,49 @@ def load_simulation_config(yaml_path):
     T_K = atmosphere["t"].values
     c0_mps = fastInterp1(alt_m, c_mps, h0_m)
     
+    amod = {
+        "alt_m": alt_m,
+        "rho_kgpm3": rho_kgpm3,
+        "c_mps": c_mps,
+        "p_Npm2" : p_Npm2,
+        "T_K": T_K
+    }
+    
+    earth_type = instruction_cfg.get('earth_model', 'WGS84') # 'WGS84', 'Spherical_Rotating', 'Spherical_NonRotating'
+    gravity_mapping = {'constant': 0, 'inverse_square': 1, 'J2': 2}
+    gravity_type = gravity_mapping.get(instruction_cfg.get('gravity_type', 'J2'), 2)
+    
+    if earth_type == 'WGS84':
+        earth = EarthModel(gravity_type=gravity_type) # Defaults to WGS84 constants
+    elif earth_type == 'Spherical_Rotating':
+        # Zero out J2, force polar radius = equatorial radius
+        earth = EarthModel(b_m=6378137.0, j2=0.0, gravity_type=gravity_type)
+    elif earth_type == 'Spherical_NonRotating':
+        earth = EarthModel(b_m=6378137.0, omega_rps=0.0, j2=0.0, gravity_type=gravity_type)
+    else:
+        raise ValueError("Invalid earth model type")
+    
+    wind_mapping = {'constant': 0, 'polynomial': 1}
+    wind_type = wind_mapping.get(wind_cfg.get('wind_type', 'constant'), 0)
+    wind_params_cfg = wind_cfg.get('params', {})
+    wind_dir_rad = wind_params_cfg.get('dir_deg', 0) * D2R
+    wind_offset = wind_params_cfg.get('offset', 0)
+    wind_slope = wind_params_cfg.get('slope', 0)
+    wind_model = WindModel(wind_type, wind_dir_rad, wind_offset, wind_slope)
+    
+    # Instantiate EOM
+    eom = eom_solver(earth_model=earth, wind_model=wind_model, atmo_model=amod)
+    
     # --- Parse Attitude First (Required for NED transformations) ---
-    phi0_rad = get_unified_value(init_cond_cfg, 'phi', D2R) or 0.0
-    theta0_rad = get_unified_value(init_cond_cfg, 'theta', D2R) or 0.0
-    psi0_rad = get_unified_value(init_cond_cfg, 'psi', D2R) or 0.0
+    phi0_rad = get_si_value(init_cond_cfg, 'phi', D2R) or 0.0
+    theta0_rad = get_si_value(init_cond_cfg, 'theta', D2R) or 0.0
+    psi0_rad = get_si_value(init_cond_cfg, 'psi', D2R) or 0.0
     
     # --- Resolve Kinematic Pitch Plane Angles (alpha, gamma) ---
     # We still need alpha/gamma for the consistency checks
-    alpha_cfg = get_unified_value(init_cond_cfg, 'alpha', D2R)
-    gamma_cfg = get_unified_value(init_cond_cfg, 'gamma', D2R)
-    beta_rad  = get_unified_value(init_cond_cfg, 'beta', D2R) or 0.0
+    alpha_cfg = get_si_value(init_cond_cfg, 'alpha', D2R)
+    gamma_cfg = get_si_value(init_cond_cfg, 'gamma', D2R)
+    beta_rad  = get_si_value(init_cond_cfg, 'beta', D2R) or 0.0
     
     # --- Velocity Mode Detection & Resolution ---
     # Define potential keys for each mode
@@ -163,7 +198,7 @@ def load_simulation_config(yaml_path):
     # Resolve to body frame (u, v, w) in m/s
     if mode == 'air':
         # Existing Airspeed logic
-        V_n_mps = get_unified_value(init_cond_cfg, 'V', FT2M)
+        V_n_mps = get_si_value(init_cond_cfg, 'V', FT2M)
         if V_n_mps is None and 'Mach' in init_cond_cfg:
             V_n_mps = init_cond_cfg['Mach'] * c0_mps
         
@@ -175,16 +210,16 @@ def load_simulation_config(yaml_path):
         w0_b_mps = V_n_mps * math.sin(alpha_cfg) * math.cos(beta_rad)
 
     elif mode == 'body':
-        u0_b_mps = get_unified_value(init_cond_cfg, 'u_b', FT2M) or 0.0
-        v0_b_mps = get_unified_value(init_cond_cfg, 'v_b', FT2M) or 0.0
-        w0_b_mps = get_unified_value(init_cond_cfg, 'w_b', FT2M) or 0.0
+        u0_b_mps = get_si_value(init_cond_cfg, 'u_b', FT2M) or 0.0
+        v0_b_mps = get_si_value(init_cond_cfg, 'v_b', FT2M) or 0.0
+        w0_b_mps = get_si_value(init_cond_cfg, 'w_b', FT2M) or 0.0
         V_n_mps = math.sqrt(u0_b_mps**2 + v0_b_mps**2 + w0_b_mps**2)
 
     elif mode == 'ned':
         # Requires Euler angles (parsed above) to build DCM
-        u_n = get_unified_value(init_cond_cfg, 'u_n', FT2M) or 0.0
-        v_n = get_unified_value(init_cond_cfg, 'v_n', FT2M) or 0.0
-        w_n = get_unified_value(init_cond_cfg, 'w_n', FT2M) or 0.0
+        u_n = get_si_value(init_cond_cfg, 'u_n', FT2M) or 0.0
+        v_n = get_si_value(init_cond_cfg, 'v_n', FT2M) or 0.0
+        w_n = get_si_value(init_cond_cfg, 'w_n', FT2M) or 0.0
         
         # Transform NED to Body
         # C_b2n inverse is transpose
@@ -224,31 +259,6 @@ def load_simulation_config(yaml_path):
     delr_ach_deg = init_cond_cfg.get('delr_ach_deg', 0)
     
     m_fuel_kg = init_cond_cfg.get('m_fuel_kg', 0)
-    
-    amod = {
-        "alt_m": alt_m,
-        "rho_kgpm3": rho_kgpm3,
-        "c_mps": c_mps,
-        "p_Npm2" : p_Npm2,
-        "T_K": T_K
-    }
-    
-    earth_type = instruction_cfg.get('earth_model', 'WGS84') # 'WGS84', 'Spherical_Rotating', 'Spherical_NonRotating'
-    gravity_mapping = {'constant': 0, 'inverse_square': 1, 'J2': 2}
-    gravity_type = gravity_mapping.get(instruction_cfg.get('gravity_type', 'J2'), 2)
-    
-    if earth_type == 'WGS84':
-        earth = EarthModel(gravity_type=gravity_type) # Defaults to WGS84 constants
-    elif earth_type == 'Spherical_Rotating':
-        # Zero out J2, force polar radius = equatorial radius
-        earth = EarthModel(b_m=6378137.0, j2=0.0, gravity_type=gravity_type)
-    elif earth_type == 'Spherical_NonRotating':
-        earth = EarthModel(b_m=6378137.0, omega_rps=0.0, j2=0.0, gravity_type=gravity_type)
-    else:
-        raise ValueError("Invalid earth model type")
-    
-    # Instantiate EOM
-    eom = eom_solver(earth_model=earth)
     
     # Convert Geodetic (Lat, Lon, Alt) to ECEF (X, Y, Z)
     sin_lat = math.sin(lat0_rad)
@@ -302,4 +312,4 @@ def load_simulation_config(yaml_path):
     # print(f"delr_ach_deg: {delr_ach_deg}")
     # print(f"m_fuel_kg: {m_fuel_kg}")
 
-    return eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir
+    return eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model

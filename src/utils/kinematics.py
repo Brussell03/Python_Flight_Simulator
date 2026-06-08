@@ -20,6 +20,28 @@ def quat_to_dcm(q0, q1, q2, q3):
         [C31, C32, C33]
     ], dtype=np.float64)
 
+def quat_to_dcm_vectorized(q0, q1, q2, q3):
+    """Converts unit quaternions (nt,) to Direction Cosine Matrices (3, 3, nt)."""
+    # These operations automatically broadcast across the (nt,) array
+    C11 = q0**2 + q1**2 - q2**2 - q3**2
+    C12 = 2 * (q1*q2 - q0*q3)
+    C13 = 2 * (q1*q3 + q0*q2)
+    C21 = 2 * (q1*q2 + q0*q3)
+    C22 = q0**2 - q1**2 + q2**2 - q3**2
+    C23 = 2 * (q2*q3 - q0*q1)
+    C31 = 2 * (q1*q3 - q0*q2)
+    C32 = 2 * (q2*q3 + q0*q1)
+    C33 = q0**2 - q1**2 - q2**2 + q3**2
+    
+    # 1. Stack into (3, 3, nt)
+    # 2. Transpose axes to (nt, 3, 3) 
+    #    (new_axis_0 = old_axis_2, new_axis_1 = old_axis_0, new_axis_2 = old_axis_1)
+    return np.stack([
+        np.stack([C11, C12, C13]),
+        np.stack([C21, C22, C23]),
+        np.stack([C31, C32, C33])
+    ]).transpose(2, 0, 1)
+
 @njit
 def dcm_to_quat(C: np.ndarray) -> np.ndarray:
     """

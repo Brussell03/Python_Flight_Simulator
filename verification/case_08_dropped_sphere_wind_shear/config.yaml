@@ -16,6 +16,13 @@ instructions:
     tf_s: 30.0
     dt_s: 0.012
 
+wind:
+    wind_type: "polynomial"
+    params:
+        dir_deg: 90
+        slope: 0.003
+        offset: -6.096
+
 output:
     save_data: true
     show_plots: false

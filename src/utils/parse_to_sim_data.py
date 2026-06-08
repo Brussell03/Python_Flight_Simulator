@@ -116,7 +116,7 @@ def get_unit_conversion(col_name, attr_name):
         
     return factor, conversion_msg.strip()
 
-def parse_csvs(file_paths, dt=0.01):
+def parse_csvs(file_paths, dt=0.01, wind_model=None):
     # Normalize input: if a single Path or string is passed, wrap it in a list
     if isinstance(file_paths, (Path, str)):
         file_paths = [Path(file_paths)]
@@ -187,9 +187,22 @@ def parse_csvs(file_paths, dt=0.01):
         
         sim_data_kwargs[ds['attr_name']] = interpolated_data
 
+    if wind_model is not None:
+        vec_get_velocity = np.vectorize(wind_model.get_velocity, otypes=[float, float, float])
+        
+        w_n, w_e, w_d = vec_get_velocity(sim_data_kwargs.get('h_m'))
+        
+        sim_data_kwargs['W_N_mps'] = w_n
+        sim_data_kwargs['W_E_mps'] = w_e
+        sim_data_kwargs['W_D_mps'] = w_d
+    
+    # sim_data_kwargs['W_N_mps'] = np.zeros(n_time_bps)
+    # sim_data_kwargs['W_E_mps'] = np.full(n_time_bps, 20 * FT2M)
+    # sim_data_kwargs['W_D_mps'] = np.zeros(n_time_bps)
+
     return SimData(**sim_data_kwargs)
 
-def parse_all_csvs(input_path, dt=0.01):
+def parse_all_csvs(input_path, dt=0.01, wind_model=None):
     path = Path(input_path)
 
     # Determine if input is a single file or a directory
@@ -209,7 +222,7 @@ def parse_all_csvs(input_path, dt=0.01):
     file_names = []
     for file_path in file_paths:
         # print(file_path)
-        sim_datas.append(parse_csvs(file_path, dt))
+        sim_datas.append(parse_csvs(file_path, dt, wind_model))
         file_names.append(file_path.stem)
     
     return sim_datas, file_names

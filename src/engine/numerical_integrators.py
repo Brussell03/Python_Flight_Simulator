@@ -3,26 +3,26 @@ from scipy.integrate import solve_ivp
 
 from src.utils.constants import NUM_AUX
 
-def forward_euler(f, t, x, h_s, vmod, amod, cmod, u_trim, dx, auxillary_data):
+def forward_euler(f, t, x, h_s, vmod, cmod, u_trim, dx, auxillary_data):
     """
     Performs forward Euler integration to approximate the solution of a differential equation.
     """
 
-    dx, auxillary_data = f(t, x, dx, auxillary_data, u_trim, vmod, amod, cmod)
+    dx, auxillary_data = f(t, x, dx, auxillary_data, u_trim, vmod, cmod)
     x_new = x + h_s * dx
     
     return x_new, auxillary_data
 
-def AB2(f, t, x, t_prev, x_prev, h_s, vmod, amod, cmod, u_trim, dx, auxillary_data, i):
+def AB2(f, t, x, t_prev, x_prev, h_s, vmod, cmod, u_trim, dx, auxillary_data, i):
     """
     Performs the 2nd order Adams-Bashforth method to approximate the solution of a differential equation.
     """
 
-    fim1, auxillary_data = f(t, x, dx, auxillary_data, u_trim, vmod, amod, cmod)
+    fim1, auxillary_data = f(t, x, dx, auxillary_data, u_trim, vmod, cmod)
     if i == 0:
         x_new = x + h_s * fim1
     else:
-        fim2, _ = f(t_prev, x_prev, dx, auxillary_data, u_trim, vmod, amod, cmod)
+        fim2, _ = f(t_prev, x_prev, dx, auxillary_data, u_trim, vmod, cmod)
         x_new = x + 1.5*h_s*fim1 - 0.5*h_s*fim2
     
     return x_new, auxillary_data
@@ -44,7 +44,7 @@ def RK4(f, t, x, h_s, vmod, amod, cmod, u_trim, dx, auxillary_data):
 
     return x_new, auxillary_data
 
-def adaptive_integration(eom_func, t_span, t_eval, x0, vehicle, amod, cmod, u_trim, method='RK45', rtol=1e-6, atol=1e-6):
+def adaptive_integration(eom_func, t_span, t_eval, x0, vehicle, cmod, u_trim, method='RK45', rtol=1e-6, atol=1e-6):
     """
     Adaptive integrator wrapper using scipy's solve_ivp.
     Supports 'RK45', 'RK23', 'DOP853', 'Radau', 'BDF', and 'LSODA'.
@@ -57,7 +57,7 @@ def adaptive_integration(eom_func, t_span, t_eval, x0, vehicle, amod, cmod, u_tr
 
     def eom_wrapper(t, x):
         # SciPy provides 't' as a float and 'x' as a 1D array
-        eom_func(t, x, dx_tmp, aux_tmp, u_trim, vehicle, amod, cmod)
+        eom_func(t, x, dx_tmp, aux_tmp, u_trim, vehicle, cmod)
         return dx_tmp
 
     # Phase 1: State Integration
@@ -84,7 +84,7 @@ def adaptive_integration(eom_func, t_span, t_eval, x0, vehicle, amod, cmod, u_tr
     # Run the exact EOM logic on the finalized, accepted state array to harvest aux data.
     # This completely eliminates logic duplication (like rewriting SAS/trim routing).
     for i in range(nt):
-        eom_func(t_out[i], x_out[:, i], dx_tmp, aux_tmp, u_trim, vehicle, amod, cmod)
+        eom_func(t_out[i], x_out[:, i], dx_tmp, aux_tmp, u_trim, vehicle, cmod)
         aux_data_accum[:, i] = aux_tmp
 
     return t_out, x_out, aux_data_accum

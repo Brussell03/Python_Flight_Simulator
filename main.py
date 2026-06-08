@@ -25,7 +25,7 @@ def run_job(input_path):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
     
     # 1. Initialization
-    eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir = load_simulation_config(config_path)
+    eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
     
     job_name = meta_cfg['job_name']
     
@@ -36,7 +36,7 @@ def run_job(input_path):
     u_trim = np.zeros(4)
     if instruction_cfg.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
-        x_trim, u_trim, msg = trim_solver(eom, vehicle, amod, control_cfg, trim_cfg, x0)
+        x_trim, u_trim, msg = trim_solver(eom, vehicle, control_cfg, trim_cfg, x0)
         
         if x_trim is not None:
             x0 = x_trim # Override initial conditions with trim state
@@ -46,7 +46,7 @@ def run_job(input_path):
                 
                 state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
                 
-                A, B, core_state_names, core_control_names = compute_state_space(x_trim, u_trim, vehicle, amod, control_cfg, state_names)
+                A, B, core_state_names, core_control_names = compute_state_space(x_trim, u_trim, vehicle, control_cfg, state_names)
                 
                 analyze_mode_shapes(A, core_state_names)
                 plot_linear_response(A, B, t_end=30.0) # Set to 30s to watch the unstable modes diverge
@@ -65,7 +65,7 @@ def run_job(input_path):
         t_span = (t0_s, tf_s + dt_s)
         
         t_s, x, aux_data_accum = adaptive_integration(
-            eom.solve_eom, t_span, t_s, x0, vehicle, amod, control_cfg, u_trim, 
+            eom.solve_eom, t_span, t_s, x0, vehicle, control_cfg, u_trim, 
             method=integrator_type, rtol=1e-6, atol=1e-6
         )
         
@@ -84,16 +84,16 @@ def run_job(input_path):
             t_i = t_s[i]
             x_i = x[:, i]
             
-            x[:, i + 1], aux_tmp = RK4(eom.solve_eom, t_i, x_i, dt_s, vehicle, amod, control_cfg, u_trim, dx_tmp, aux_tmp)
+            x[:, i + 1], aux_tmp = RK4(eom.solve_eom, t_i, x_i, dt_s, vehicle, control_cfg, u_trim, dx_tmp, aux_tmp)
             aux_data_accum[:, i + 1] = aux_tmp
             
         # Ensure aux data lines up for t=0
-        _, aux_data_accum[:, 0] = eom.solve_eom(t_s[0], x[:, 0], dx_tmp, aux_tmp, vehicle, amod, control_cfg, u_trim)
+        _, aux_data_accum[:, 0] = eom.solve_eom(t_s[0], x[:, 0], dx_tmp, aux_tmp, vehicle, control_cfg, u_trim)
 
     # Vectorized Post-Processing
     print("\n--- Post-Processing Data ---")
     
-    sim_data = eom.post_process(x, t_s, amod, aux_data_accum)
+    sim_data = eom.post_process(x, t_s, aux_data_accum)
     data_name = 'Simulation'
     sim_dict = {'name': data_name, 'data': sim_data}
 
@@ -140,7 +140,7 @@ def run_job(input_path):
                 plt.close('all')
     
     if instruction_cfg.get('compare', False) and compare_cfg.get('path') is not None:
-        compare_data_to_files(sim_dict, compare_cfg, job_dir, title_prefix=vehicle.vehicle_name)
+        compare_data_to_files(sim_dict, compare_cfg, job_dir, title_prefix=meta_cfg['description'], wind_model=wind_model)
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py jobs/x15_descending_turn

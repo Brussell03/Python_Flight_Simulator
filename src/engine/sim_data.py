@@ -60,6 +60,11 @@ class SimData:
     delr_cmd_deg: np.ndarray        # commanded rudder surface deflection angle from flight control system [deg]
     delt_percent: np.ndarray        # engine throttle lever position command [0.0 to 100.0%]
     
+    # Optional Wind Parameters (Default to None to avoid breaking previous initializations)
+    W_N_mps: np.ndarray = None      # North wind component resolved in local navigation (NED) frame [m/s]
+    W_E_mps: np.ndarray = None      # East wind component resolved in local navigation (NED) frame [m/s]
+    W_D_mps: np.ndarray = None      # Down wind component resolved in local navigation (NED) frame [m/s]
+    
     def __post_init__(self):
         """Attempts to calculate missing telemetry data using established kinematic relationships."""
         
@@ -80,83 +85,168 @@ class SimData:
             self.theta_rad = np.where(np.isnan(self.theta_rad), theta_calc, self.theta_rad)
             self.psi_rad = np.where(np.isnan(self.psi_rad), psi_calc, self.psi_rad)
 
-        # 2. Frame Transformations for Velocity (Body <-> NED Navigation)
+        # 2. Frame Transformations (Unconditional generation of DCM for wind mapping)
+        phi_safe = np.nan_to_num(self.phi_rad, nan=0.0)
+        theta_safe = np.nan_to_num(self.theta_rad, nan=0.0)
+        psi_safe = np.nan_to_num(self.psi_rad, nan=0.0)
+
+        c_phi, s_phi = np.cos(phi_safe), np.sin(phi_safe)
+        c_theta, s_theta = np.cos(theta_safe), np.sin(theta_safe)
+        c_psi, s_psi = np.cos(psi_safe), np.sin(psi_safe)
+
+        # Direction Cosine Matrix (Body -> Nav) components
+        R11 = c_theta * c_psi
+        R12 = s_phi * s_theta * c_psi - c_phi * s_psi
+        R13 = c_phi * s_theta * c_psi + s_phi * s_psi
+        R21 = c_theta * s_psi
+        R22 = s_phi * s_theta * s_psi + c_phi * c_psi
+        R23 = c_phi * s_theta * s_psi - s_phi * c_psi
+        R31 = -s_theta
+        R32 = s_phi * c_theta
+        R33 = c_phi * c_theta
+        
         has_nav_vel = not (np.isnan(self.u_n_mps).all() and np.isnan(self.v_n_mps).all() and np.isnan(self.w_n_mps).all())
         has_body_vel = not (np.isnan(self.u_b_mps).all() and np.isnan(self.v_b_mps).all() and np.isnan(self.w_b_mps).all())
-
-        if has_nav_vel or has_body_vel:
-            # Zero-fill missing Euler components to prevent NaN propagation in the DCM
-            phi_safe = np.nan_to_num(self.phi_rad, nan=0.0)
-            theta_safe = np.nan_to_num(self.theta_rad, nan=0.0)
-            psi_safe = np.nan_to_num(self.psi_rad, nan=0.0)
-
-            c_phi, s_phi = np.cos(phi_safe), np.sin(phi_safe)
-            c_theta, s_theta = np.cos(theta_safe), np.sin(theta_safe)
-            c_psi, s_psi = np.cos(psi_safe), np.sin(psi_safe)
-
-            # Direction Cosine Matrix (Body -> Nav) components
-            R11 = c_theta * c_psi
-            R12 = s_phi * s_theta * c_psi - c_phi * s_psi
-            R13 = c_phi * s_theta * c_psi + s_phi * s_psi
-            R21 = c_theta * s_psi
-            R22 = s_phi * s_theta * s_psi + c_phi * c_psi
-            R23 = c_phi * s_theta * s_psi - s_phi * c_psi
-            R31 = -s_theta
-            R32 = s_phi * c_theta
-            R33 = c_phi * c_theta
-
-            # Calculate Body Velocities (Nav -> Body via DCM Transpose)
-            if has_nav_vel:
-                un = np.nan_to_num(self.u_n_mps, nan=0.0)
-                vn = np.nan_to_num(self.v_n_mps, nan=0.0)
-                wn = np.nan_to_num(self.w_n_mps, nan=0.0)
-                
-                u_b_calc = R11 * un + R21 * vn + R31 * wn
-                v_b_calc = R12 * un + R22 * vn + R32 * wn
-                w_b_calc = R13 * un + R23 * vn + R33 * wn
-                
-                self.u_b_mps = np.where(np.isnan(self.u_b_mps), u_b_calc, self.u_b_mps)
-                self.v_b_mps = np.where(np.isnan(self.v_b_mps), v_b_calc, self.v_b_mps)
-                self.w_b_mps = np.where(np.isnan(self.w_b_mps), w_b_calc, self.w_b_mps)
-
-            # Calculate Nav Velocities (Body -> Nav via DCM)
-            if has_body_vel:
-                ub = np.nan_to_num(self.u_b_mps, nan=0.0)
-                vb = np.nan_to_num(self.v_b_mps, nan=0.0)
-                wb = np.nan_to_num(self.w_b_mps, nan=0.0)
-                
-                u_n_calc = R11 * ub + R12 * vb + R13 * wb
-                v_n_calc = R21 * ub + R22 * vb + R23 * wb
-                w_n_calc = R31 * ub + R32 * vb + R33 * wb
-                
-                self.u_n_mps = np.where(np.isnan(self.u_n_mps), u_n_calc, self.u_n_mps)
-                self.v_n_mps = np.where(np.isnan(self.v_n_mps), v_n_calc, self.v_n_mps)
-                self.w_n_mps = np.where(np.isnan(self.w_n_mps), w_n_calc, self.w_n_mps)
-
+        
+        # Calculate Body Velocities (Nav -> Body via DCM Transpose)
+        if has_nav_vel:
+            un = np.nan_to_num(self.u_n_mps, nan=0.0)
+            vn = np.nan_to_num(self.v_n_mps, nan=0.0)
+            wn = np.nan_to_num(self.w_n_mps, nan=0.0)
+            
+            u_b_calc = R11 * un + R21 * vn + R31 * wn
+            v_b_calc = R12 * un + R22 * vn + R32 * wn
+            w_b_calc = R13 * un + R23 * vn + R33 * wn
+            
+            self.u_b_mps = np.where(np.isnan(self.u_b_mps), u_b_calc, self.u_b_mps)
+            self.v_b_mps = np.where(np.isnan(self.v_b_mps), v_b_calc, self.v_b_mps)
+            self.w_b_mps = np.where(np.isnan(self.w_b_mps), w_b_calc, self.w_b_mps)
+        
+        # Calculate Nav Velocities (Body -> Nav via DCM)
+        if has_body_vel:
+            ub = np.nan_to_num(self.u_b_mps, nan=0.0)
+            vb = np.nan_to_num(self.v_b_mps, nan=0.0)
+            wb = np.nan_to_num(self.w_b_mps, nan=0.0)
+            
+            u_n_calc = R11 * ub + R12 * vb + R13 * wb
+            v_n_calc = R21 * ub + R22 * vb + R23 * wb
+            w_n_calc = R31 * ub + R32 * vb + R33 * wb
+            
+            self.u_n_mps = np.where(np.isnan(self.u_n_mps), u_n_calc, self.u_n_mps)
+            self.v_n_mps = np.where(np.isnan(self.v_n_mps), v_n_calc, self.v_n_mps)
+            self.w_n_mps = np.where(np.isnan(self.w_n_mps), w_n_calc, self.w_n_mps)
+        
         # 3. Aerodynamic Data Reconstruction
-        # Ensure safe arrays for aerodynamic angular math so `arctan2` does not process NaNs
         ub_safe = np.nan_to_num(self.u_b_mps, nan=0.0)
         vb_safe = np.nan_to_num(self.v_b_mps, nan=0.0)
         wb_safe = np.nan_to_num(self.w_b_mps, nan=0.0)
+
+        # Safeguard wind inputs
+        wn_safe = np.nan_to_num(self.W_N_mps, nan=0.0) if self.W_N_mps is not None else np.zeros_like(ub_safe)
+        we_safe = np.nan_to_num(self.W_E_mps, nan=0.0) if self.W_E_mps is not None else np.zeros_like(ub_safe)
+        wd_safe = np.nan_to_num(self.W_D_mps, nan=0.0) if self.W_D_mps is not None else np.zeros_like(ub_safe)
+
+        # Transform Wind from NED to Body Frame via C_n2b
+        W_u = R11 * wn_safe + R21 * we_safe + R31 * wd_safe
+        W_v = R12 * wn_safe + R22 * we_safe + R32 * wd_safe
+        W_w = R13 * wn_safe + R23 * we_safe + R33 * wd_safe
+
+        # Isolate Air-Relative Velocities
+        u_air = ub_safe - W_u
+        v_air = vb_safe - W_v
+        w_air = wb_safe - W_w
         
-        vt_calc = np.sqrt(ub_safe**2 + vb_safe**2 + wb_safe**2)
+        vt_calc = np.sqrt(u_air**2 + v_air**2 + w_air**2)
         
         if has_body_vel or has_nav_vel:
             self.true_airspeed_mps = np.where(np.isnan(self.true_airspeed_mps), vt_calc, self.true_airspeed_mps)
             
             vt_safe = np.where(vt_calc == 0, 1e-9, vt_calc)
             
-            # Corrected: np.arctan2(y, x)
-            alpha_calc = np.arctan2(wb_safe, ub_safe)
+            alpha_calc = np.arctan2(w_air, u_air)
             self.alpha_rad = np.where(np.isnan(self.alpha_rad), alpha_calc, self.alpha_rad)
             
-            beta_calc = np.arcsin(np.clip(vb_safe / vt_safe, -1.0, 1.0))
+            beta_calc = np.arcsin(np.clip(v_air / vt_safe, -1.0, 1.0))
             self.beta_rad = np.where(np.isnan(self.beta_rad), beta_calc, self.beta_rad)
             
             if not np.isnan(self.cs_mps).all():
                 cs_safe = np.where(np.isnan(self.cs_mps) | (self.cs_mps == 0), 1e-9, self.cs_mps)
                 mach_calc = self.true_airspeed_mps / cs_safe
                 self.mach = np.where(np.isnan(self.mach), mach_calc, self.mach)
+
+        # if has_nav_vel or has_body_vel:
+        #     # Zero-fill missing Euler components to prevent NaN propagation in the DCM
+        #     phi_safe = np.nan_to_num(self.phi_rad, nan=0.0)
+        #     theta_safe = np.nan_to_num(self.theta_rad, nan=0.0)
+        #     psi_safe = np.nan_to_num(self.psi_rad, nan=0.0)
+
+        #     c_phi, s_phi = np.cos(phi_safe), np.sin(phi_safe)
+        #     c_theta, s_theta = np.cos(theta_safe), np.sin(theta_safe)
+        #     c_psi, s_psi = np.cos(psi_safe), np.sin(psi_safe)
+
+        #     # Direction Cosine Matrix (Body -> Nav) components
+        #     R11 = c_theta * c_psi
+        #     R12 = s_phi * s_theta * c_psi - c_phi * s_psi
+        #     R13 = c_phi * s_theta * c_psi + s_phi * s_psi
+        #     R21 = c_theta * s_psi
+        #     R22 = s_phi * s_theta * s_psi + c_phi * c_psi
+        #     R23 = c_phi * s_theta * s_psi - s_phi * c_psi
+        #     R31 = -s_theta
+        #     R32 = s_phi * c_theta
+        #     R33 = c_phi * c_theta
+
+        #     # Calculate Body Velocities (Nav -> Body via DCM Transpose)
+        #     if has_nav_vel:
+        #         un = np.nan_to_num(self.u_n_mps, nan=0.0)
+        #         vn = np.nan_to_num(self.v_n_mps, nan=0.0)
+        #         wn = np.nan_to_num(self.w_n_mps, nan=0.0)
+                
+        #         u_b_calc = R11 * un + R21 * vn + R31 * wn
+        #         v_b_calc = R12 * un + R22 * vn + R32 * wn
+        #         w_b_calc = R13 * un + R23 * vn + R33 * wn
+                
+        #         self.u_b_mps = np.where(np.isnan(self.u_b_mps), u_b_calc, self.u_b_mps)
+        #         self.v_b_mps = np.where(np.isnan(self.v_b_mps), v_b_calc, self.v_b_mps)
+        #         self.w_b_mps = np.where(np.isnan(self.w_b_mps), w_b_calc, self.w_b_mps)
+
+        #     # Calculate Nav Velocities (Body -> Nav via DCM)
+        #     if has_body_vel:
+        #         ub = np.nan_to_num(self.u_b_mps, nan=0.0)
+        #         vb = np.nan_to_num(self.v_b_mps, nan=0.0)
+        #         wb = np.nan_to_num(self.w_b_mps, nan=0.0)
+                
+        #         u_n_calc = R11 * ub + R12 * vb + R13 * wb
+        #         v_n_calc = R21 * ub + R22 * vb + R23 * wb
+        #         w_n_calc = R31 * ub + R32 * vb + R33 * wb
+                
+        #         self.u_n_mps = np.where(np.isnan(self.u_n_mps), u_n_calc, self.u_n_mps)
+        #         self.v_n_mps = np.where(np.isnan(self.v_n_mps), v_n_calc, self.v_n_mps)
+        #         self.w_n_mps = np.where(np.isnan(self.w_n_mps), w_n_calc, self.w_n_mps)
+
+        # # 3. Aerodynamic Data Reconstruction
+        # # Ensure safe arrays for aerodynamic angular math so `arctan2` does not process NaNs
+        # ub_safe = np.nan_to_num(self.u_b_mps, nan=0.0)
+        # vb_safe = np.nan_to_num(self.v_b_mps, nan=0.0)
+        # wb_safe = np.nan_to_num(self.w_b_mps, nan=0.0)
+        
+        # vt_calc = np.sqrt(ub_safe**2 + vb_safe**2 + wb_safe**2)
+        
+        # if has_body_vel or has_nav_vel:
+        #     self.true_airspeed_mps = np.where(np.isnan(self.true_airspeed_mps), vt_calc, self.true_airspeed_mps)
+            
+        #     vt_safe = np.where(vt_calc == 0, 1e-9, vt_calc)
+            
+        #     # Corrected: np.arctan2(y, x)
+        #     alpha_calc = np.arctan2(wb_safe, ub_safe)
+        #     self.alpha_rad = np.where(np.isnan(self.alpha_rad), alpha_calc, self.alpha_rad)
+            
+        #     beta_calc = np.arcsin(np.clip(vb_safe / vt_safe, -1.0, 1.0))
+        #     self.beta_rad = np.where(np.isnan(self.beta_rad), beta_calc, self.beta_rad)
+            
+        #     if not np.isnan(self.cs_mps).all():
+        #         cs_safe = np.where(np.isnan(self.cs_mps) | (self.cs_mps == 0), 1e-9, self.cs_mps)
+        #         mach_calc = self.true_airspeed_mps / cs_safe
+        #         self.mach = np.where(np.isnan(self.mach), mach_calc, self.mach)
     
     @property
     def lat_deg(self) -> np.ndarray:

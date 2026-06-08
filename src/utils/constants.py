@@ -2,7 +2,7 @@ import math
 
 # --- State Constants ---
 NUM_STATE = 17
-NUM_AUX = 13
+NUM_AUX = 16
 
 # --- Unit Conversions ---
 D2R = math.pi / 180.0
