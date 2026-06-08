@@ -1,4 +1,4 @@
-# X-15 6-DOF Flight Dynamics Simulator
+# 6-DOF Flight Dynamics Simulator
 
 ## Overview
 This repository contains a modular, high-fidelity, 6-Degree-of-Freedom (6-DOF) flight dynamics simulation engine. The architecture is engineered for advanced stability and control analysis, full-state trajectory integration, and comprehensive numerical linearization across the flight envelope.
