@@ -153,6 +153,8 @@ class X15(Vehicle):
         Jyy_b_kgm2 = fastInterp1(mass_bps, self.Jyy_kgm2_v_mass_kg, m_total_kg)
         Jzz_b_kgm2 = fastInterp1(mass_bps, self.Jzz_kgm2_v_mass_kg, m_total_kg)
         Jxz_b_kgm2 = fastInterp1(mass_bps, self.Jxz_kgm2_v_mass_kg, m_total_kg)
+        Jxy_b_kgm2 = self.get_si_val(self.Jxy_def)
+        Jyz_b_kgm2 = self.get_si_val(self.Jyz_def)
         
         # Jxx_b_slugft2 = 3600
         # Jxx_b_kgm2 = Jxx_b_slugft2*1.355
@@ -163,7 +165,7 @@ class X15(Vehicle):
         # Jzz_b_slugft2 = 88500
         # Jzz_b_kgm2 = Jzz_b_slugft2*1.355
         
-        return Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxz_b_kgm2
+        return Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxy_b_kgm2, Jxz_b_kgm2, Jyz_b_kgm2
 
     def get_aero_coeffs(self, alpha_deg, Mach, dele_ach_deg, speedbrake):
         """

@@ -37,8 +37,10 @@ output:
 compare:
     path: "verification_data"
     save_compare: true
-    show_plots: true
-    plot_error: false
+    plot_values: true
+    show_values: true
+    plot_error: true
+    show_error: false
     plots:
         6dof: true
         attitude: true

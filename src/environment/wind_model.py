@@ -32,6 +32,24 @@ class WindModel:
             wind_speed_mps = self.slope_mps * h_m + self.offset_m
         
         return wind_speed_mps * np.cos(self.dir_rad), wind_speed_mps * np.sin(self.dir_rad), 0
+    
+    def get_shear(self, h_m: float):
+        shear_mag_s1 = 0.0
+        
+        # Constant Model
+        if self.wind_type == 0:
+            shear_mag_s1 = 0.0
+        
+        # Linear Model: wind = slope * h + offset
+        elif self.wind_type == 1:
+            shear_mag_s1 = self.slope_mps
+        
+        # Decompose into NED components
+        dw_n = shear_mag_s1 * np.cos(self.dir_rad)
+        dw_e = shear_mag_s1 * np.sin(self.dir_rad)
+        dw_d = 0.0
+        
+        return dw_n, dw_e, dw_d
 
 @njit
 def compute_wind_vectorized(model, h_array):

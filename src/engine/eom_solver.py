@@ -27,7 +27,7 @@ class eom_solver:
 
         # Vehicle Mass State Interface
         m_total_kg = vehicle.m_dry_kg + m_fuel_kg
-        Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxz_b_kgm2 = vehicle.get_mass_properties(m_total_kg)
+        Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxy_b_kgm2, Jxz_b_kgm2, Jyz_b_kgm2 = vehicle.get_mass_properties(m_total_kg)
         
         speedbrake = cmod.get("speedbrake", False)
 
@@ -72,8 +72,8 @@ class eom_solver:
         C_b2n = C_n2b.T
         
         # Wind Engine Interface
-        W_N_mps, W_E_mps, W_D_mps = self.wind_model.get_velocity(h_m) # self.wind_model.wind_n_mps, self.wind_model.wind_e_mps, self.wind_model.wind_d_mps
-        dW_N_dh, dW_E_dh, dW_D_dh = 0, 0, 0
+        W_N_mps, W_E_mps, W_D_mps = self.wind_model.get_velocity(h_m)
+        dW_N_dh, dW_E_dh, dW_D_dh = self.wind_model.get_shear(h_m)
         
         W_n_mps = np.array([W_N_mps, W_E_mps, W_D_mps])
         W_b_mps = C_n2b @ W_n_mps
@@ -149,31 +149,45 @@ class eom_solver:
             else:
                 dJ_dm = [0.0, 0.0, 0.0, 0.0]
 
-            Jxx_dot, Jyy_dot, Jzz_dot, Jxz_dot = [dJ * -m_fuel_dot_kgps for dJ in dJ_dm]
+            Jxx_dot, Jyy_dot, Jzz_dot, Jxy_dot, Jxz_dot, Jyz_dot = [dJ * -m_fuel_dot_kgps for dJ in dJ_dm]
         else:
-            Jxx_dot, Jyy_dot, Jzz_dot, Jxz_dot = 0, 0, 0, 0
+            Jxx_dot, Jyy_dot, Jzz_dot, Jxy_dot, Jxz_dot, Jyz_dot = 0, 0, 0, 0, 0, 0
 
-        # Rotational Dynamics
-        hx_b_kgm2ps = Jxx_b_kgm2 * p_b_rps - Jxz_b_kgm2 * r_b_rps
-        hy_b_kgm2ps = Jyy_b_kgm2 * q_b_rps
-        hz_b_kgm2ps = -Jxz_b_kgm2 * p_b_rps + Jzz_b_kgm2 * r_b_rps
+        # Angular Momentum (H = J * w)
+        hx_b_kgm2ps =  Jxx_b_kgm2 * p_b_rps - Jxy_b_kgm2 * q_b_rps - Jxz_b_kgm2 * r_b_rps
+        hy_b_kgm2ps = -Jxy_b_kgm2 * p_b_rps + Jyy_b_kgm2 * q_b_rps - Jyz_b_kgm2 * r_b_rps
+        hz_b_kgm2ps = -Jxz_b_kgm2 * p_b_rps - Jyz_b_kgm2 * q_b_rps + Jzz_b_kgm2 * r_b_rps
 
-        Idot_l_b_kgm2ps2 = Jxx_dot * p_b_rps - Jxz_dot * r_b_rps
-        Idot_m_b_kgm2ps2 = Jyy_dot * q_b_rps
-        Idot_n_b_kgm2ps2 = -Jxz_dot * p_b_rps + Jzz_dot * r_b_rps
+        # Time derivative of inertia acting on angular velocity (J_dot * w)
+        Idot_l_b_kgm2ps2 =  Jxx_dot * p_b_rps - Jxy_dot * q_b_rps - Jxz_dot * r_b_rps
+        Idot_m_b_kgm2ps2 = -Jxy_dot * p_b_rps + Jyy_dot * q_b_rps - Jyz_dot * r_b_rps
+        Idot_n_b_kgm2ps2 = -Jxz_dot * p_b_rps - Jyz_dot * q_b_rps + Jzz_dot * r_b_rps
 
+        # Gyroscopic coupling (w x H)
         gyro_l_b_kgm2ps2 = q_b_rps * hz_b_kgm2ps - r_b_rps * hy_b_kgm2ps
         gyro_m_b_kgm2ps2 = r_b_rps * hx_b_kgm2ps - p_b_rps * hz_b_kgm2ps
         gyro_n_b_kgm2ps2 = p_b_rps * hy_b_kgm2ps - q_b_rps * hx_b_kgm2ps
 
-        l_tot_b_kgm2ps2 = l_b_kgm2ps2 - Idot_l_b_kgm2ps2 - gyro_l_b_kgm2ps2
-        m_tot_b_kgm2ps2 = m_b_kgm2ps2 - Idot_m_b_kgm2ps2 - gyro_m_b_kgm2ps2
-        n_tot_b_kgm2ps2 = n_b_kgm2ps2 - Idot_n_b_kgm2ps2 - gyro_n_b_kgm2ps2
+        # Net moment vector M_net = M_ext - J_dot*w - w x H
+        l_tot = l_b_kgm2ps2 - Idot_l_b_kgm2ps2 - gyro_l_b_kgm2ps2
+        m_tot = m_b_kgm2ps2 - Idot_m_b_kgm2ps2 - gyro_m_b_kgm2ps2
+        n_tot = n_b_kgm2ps2 - Idot_n_b_kgm2ps2 - gyro_n_b_kgm2ps2
 
-        Gamma_inv = 1.0 / (Jxx_b_kgm2 * Jzz_b_kgm2 - Jxz_b_kgm2**2)
-        dx[3] = (Jzz_b_kgm2 * l_tot_b_kgm2ps2 + Jxz_b_kgm2 * n_tot_b_kgm2ps2) * Gamma_inv
-        dx[4] = m_tot_b_kgm2ps2 / Jyy_b_kgm2
-        dx[5] = (Jxz_b_kgm2 * l_tot_b_kgm2ps2 + Jxx_b_kgm2 * n_tot_b_kgm2ps2) * Gamma_inv
+        # Analytical inverse of 3x3 symmetric Inertia Tensor
+        C11 = Jyy_b_kgm2 * Jzz_b_kgm2 - Jyz_b_kgm2**2
+        C22 = Jxx_b_kgm2 * Jzz_b_kgm2 - Jxz_b_kgm2**2
+        C33 = Jxx_b_kgm2 * Jyy_b_kgm2 - Jxy_b_kgm2**2
+        C12 = Jxy_b_kgm2 * Jzz_b_kgm2 + Jxz_b_kgm2 * Jyz_b_kgm2
+        C13 = Jxy_b_kgm2 * Jyz_b_kgm2 + Jyy_b_kgm2 * Jxz_b_kgm2
+        C23 = Jxx_b_kgm2 * Jyz_b_kgm2 + Jxy_b_kgm2 * Jxz_b_kgm2
+
+        det_J = Jxx_b_kgm2 * C11 - Jxy_b_kgm2 * C12 - Jxz_b_kgm2 * C13
+        inv_det = 1.0 / det_J
+
+        # Final state derivatives for angular velocity
+        dx[3] = (C11 * l_tot + C12 * m_tot + C13 * n_tot) * inv_det
+        dx[4] = (C12 * l_tot + C22 * m_tot + C23 * n_tot) * inv_det
+        dx[5] = (C13 * l_tot + C23 * m_tot + C33 * n_tot) * inv_det
         
         # Quaternion rates depend on Earth-Relative Body Rates
         omega_eb_b_rps = omega_ib_b_rps - omega_ie_b_rps

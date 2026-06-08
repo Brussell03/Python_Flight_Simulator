@@ -129,7 +129,9 @@ class DAVEVehicle(Vehicle):
         Jyy = self.get_si_val(self.Jyy_def)
         Jzz = self.get_si_val(self.Jzz_def)
         Jxz = self.get_si_val(self.Jxz_def)
-        return [Jxx, Jyy, Jzz, Jxz]
+        Jxy = self.get_si_val(self.Jxy_def)
+        Jyz = self.get_si_val(self.Jyz_def)
+        return [Jxx, Jyy, Jzz, Jxy, Jxz, Jyz]
 
     def get_aero_coeffs(self, alpha, mach, **kwargs):
         # Explicit bypass: aero mapping is handled via Janus inside get_forces_and_moments
