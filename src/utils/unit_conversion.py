@@ -15,12 +15,15 @@ class UnitConverter:
         'ft_s' : 0.3048,
         'slugft2': 1.35581795,
         'slugft^2': 1.35581795,
+        'lbf': 4.4482216153,
+        'ftlbf': 1.3558179483,
         'deg': math.pi / 180.0,
         '_deg': 180.0 / math.pi,
         'rad': 1.0,
         '_rad': 1.0,
         'rad_s': 1.0,
         'nd': 1.0,
+        'pct': 1.0,
         'none': 1.0,
         '': 1.0
     }

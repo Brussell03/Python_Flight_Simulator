@@ -4,6 +4,7 @@ import numpy as np
 import yaml
 import ussa1976
 
+from models.F16.F16 import F16
 from models.cannonball.cannonball import DraglessCannonball, Cannonball
 from models.brick.brick import Brick, DraglessBrick
 from src.engine.eom_solver import eom_solver
@@ -11,7 +12,7 @@ from src.environment.earth_model import EarthModel
 from src.environment.wind_model import WindModel
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
-from src.utils.constants import D2R, FT2M
+from src.utils.constants import D2R, FT2M, R2D
 from src.utils.kinematics import dcm_to_quat, ecef_to_ned_dcm, quat_to_dcm
 
 def resolve_path(base_dir, path):
@@ -114,6 +115,8 @@ def load_simulation_config(yaml_path):
         vehicle = DraglessBrick()
     elif config['vehicle']['model'] == 'Brick':
         vehicle = Brick()
+    elif config['vehicle']['model'] == 'F16':
+        vehicle = F16()
     elif config['vehicle']['model'] == 'X15':
         vehicle = X15(time_history_path=th_path)
     else:
@@ -154,13 +157,17 @@ def load_simulation_config(yaml_path):
     else:
         raise ValueError("Invalid earth model type")
     
+    wind_on = instruction_cfg.get('wind', False)
     wind_mapping = {'constant': 0, 'polynomial': 1}
-    wind_type = wind_mapping.get(wind_cfg.get('wind_type', 'constant'), 0)
-    wind_params_cfg = wind_cfg.get('params', {})
-    wind_dir_rad = wind_params_cfg.get('dir_deg', 0) * D2R
-    wind_offset = wind_params_cfg.get('offset', 0)
-    wind_slope = wind_params_cfg.get('slope', 0)
-    wind_model = WindModel(wind_type, wind_dir_rad, wind_offset, wind_slope)
+    if wind_on:
+        wind_type = wind_mapping.get(wind_cfg.get('wind_type', 'constant'), 0)
+        wind_params_cfg = wind_cfg.get('params', {})
+        wind_dir_rad = wind_params_cfg.get('dir_deg', 0) * D2R
+        wind_offset = wind_params_cfg.get('offset', 0)
+        wind_slope = wind_params_cfg.get('slope', 0)
+        wind_model = WindModel(wind_type, wind_dir_rad, wind_offset, wind_slope)
+    else:
+        wind_model = WindModel(0, 0, 0, 0)
     
     # Instantiate EOM
     eom = eom_solver(earth_model=earth, wind_model=wind_model, atmo_model=amod)
@@ -254,23 +261,15 @@ def load_simulation_config(yaml_path):
     lat0_rad   =   init_cond_cfg.get('lat_deg') * D2R if init_cond_cfg.get('lat_deg') is not None else init_cond_cfg.get('lat_rad', 0.0)
     long0_rad  =   init_cond_cfg.get('long_deg') * D2R if init_cond_cfg.get('long_deg') is not None else init_cond_cfg.get('long_rad', 0.0)
     
+    m_fuel_kg = init_cond_cfg.get('m_fuel_kg', 0)
+    
     dela_ach_deg = init_cond_cfg.get('dela_ach_deg', 0)
     dele_ach_deg = init_cond_cfg.get('dele_ach_deg', 0)
     delr_ach_deg = init_cond_cfg.get('delr_ach_deg', 0)
-    
-    m_fuel_kg = init_cond_cfg.get('m_fuel_kg', 0)
+    delt_ach_pct = init_cond_cfg.get('delt_ach_pct', 0)
     
     # Convert Geodetic (Lat, Lon, Alt) to ECEF (X, Y, Z)
-    sin_lat = math.sin(lat0_rad)
-    cos_lat = math.cos(lat0_rad)
-    sin_lon = math.sin(long0_rad)
-    cos_lon = math.cos(long0_rad)
-    
-    N = earth.a / math.sqrt(1.0 - earth.e**2 * sin_lat**2)
-    
-    x0_e = (N + h0_m) * cos_lat * cos_lon
-    y0_e = (N + h0_m) * cos_lat * sin_lon
-    z0_e = (N * (1.0 - earth.e**2) + h0_m) * sin_lat
+    x0_e, y0_e, z0_e = earth.wgs84_to_cartesian(lat0_rad, long0_rad, h0_m)
     
     # Convert Initial Quaternions from Nav-to-Body to ECEF-to-Body
     # quat_body_to_nav returns C_b2n. The transpose is C_n2b.
@@ -286,30 +285,33 @@ def load_simulation_config(yaml_path):
         p0_b_rps, q0_b_rps, r0_b_rps,
         q0_e, q1_e, q2_e, q3_e,
         x0_e, y0_e, z0_e,
-        dela_ach_deg, dele_ach_deg, delr_ach_deg, m_fuel_kg
+        m_fuel_kg,
+        dela_ach_deg, dele_ach_deg, delr_ach_deg, delt_ach_pct
     ]
     
-    # print(f"u0_b_mps: {u0_b_mps}")
-    # print(f"v0_b_mps: {v0_b_mps}")
-    # print(f"w0_b_mps: {w0_b_mps}")
-    # print(f"p0_b_rps: {p0_b_rps}")
-    # print(f"q0_b_rps: {q0_b_rps}")
-    # print(f"r0_b_rps: {r0_b_rps}")
-    print(f"phi0_rad: {phi0_rad}")
-    print(f"theta0_rad: {theta0_rad}")
-    print(f"psi0_rad: {psi0_rad}")
-    print(f"alpha_cfg: {alpha_cfg}")
-    print(f"beta_rad: {beta_rad}")
-    # print(f"q0_e: {q0_e}")
-    # print(f"q1_e: {q1_e}")
-    # print(f"q2_e: {q2_e}")
-    # print(f"q3_e: {q3_e}")
-    # print(f"x0_e: {x0_e}")
-    # print(f"y0_e: {y0_e}")
-    # print(f"z0_e: {z0_e}")
-    # print(f"dela_ach_deg: {dela_ach_deg}")
-    # print(f"dele_ach_deg: {dele_ach_deg}")
-    # print(f"delr_ach_deg: {delr_ach_deg}")
-    # print(f"m_fuel_kg: {m_fuel_kg}")
+    print("Initial vehicle state:")
+    print(f"u0_b_mps: {u0_b_mps:.8f}")
+    print(f"v0_b_mps: {v0_b_mps:.8f}")
+    print(f"w0_b_mps: {w0_b_mps:.8f}")
+    print(f"p0_b_dps: {p0_b_rps*R2D:.8f}")
+    print(f"q0_b_dps: {q0_b_rps*R2D:.8f}")
+    print(f"r0_b_dps: {r0_b_rps*R2D:.8f}")
+    if alpha_cfg is not None: print(f"alpha_cfg: {alpha_cfg*R2D:.8f}")
+    print(f"beta_deg: {beta_rad*R2D:.8f}")
+    print(f"phi0_deg: {phi0_rad*R2D:.8f}")
+    print(f"theta0_deg: {theta0_rad*R2D:.8f}")
+    print(f"psi0_deg: {psi0_rad*R2D:.8f}")
+    # print(f"q0_e: {q0_e:.8f}")
+    # print(f"q1_e: {q1_e:.8f}")
+    # print(f"q2_e: {q2_e:.8f}")
+    # print(f"q3_e: {q3_e:.8f}")
+    print(f"x0_e: {x0_e:.8f}")
+    print(f"y0_e: {y0_e:.8f}")
+    print(f"z0_e: {z0_e:.8f}")
+    print(f"m_fuel_kg: {m_fuel_kg:.8f}")
+    print(f"dela_ach_deg: {dela_ach_deg:.8f}")
+    print(f"dele_ach_deg: {dele_ach_deg:.8f}")
+    print(f"delr_ach_deg: {delr_ach_deg:.8f}")
+    print(f"delt_ach_pct: {delt_ach_pct:.8f}")
 
-    return eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model
+    return eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model

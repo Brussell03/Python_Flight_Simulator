@@ -11,6 +11,7 @@ instructions:
     gravity_type: "J2"
     integrator: "RK45"
     simulate: true
+    wind: true
     compare: true
     t0_s: 0.0
     tf_s: 30.0

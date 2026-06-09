@@ -30,10 +30,11 @@ class Vehicle(ABC):
     def get_mass_properties(self, m_total_kg):
         """Returns inertia properties."""
         pass
-
+    
     @abstractmethod
-    def get_aero_coeffs(self, alpha, mach, **kwargs):
-        """Returns a dict of aero coefficients."""
+    def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
+                               p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
+                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
         pass
     
     @abstractmethod
@@ -55,3 +56,7 @@ class Vehicle(ABC):
     @abstractmethod
     def rudder_kinematics(self, delr_cmd_deg, delr_ach_deg):
         pass
+    
+    @abstractmethod
+    def throttle_kinematics(self, delt_cmd_pct, delt_ach_pct):
+        return 0.0

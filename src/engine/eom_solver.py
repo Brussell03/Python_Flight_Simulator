@@ -19,8 +19,8 @@ class eom_solver:
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         q_b2e = x[6:10]
         x_e_m, y_e_m, z_e_m = x[10], x[11], x[12]
-        dela_ach_deg, dele_ach_deg, delr_ach_deg = x[13], x[14], x[15]
-        m_fuel_kg = x[16]
+        m_fuel_kg = x[13]
+        dela_ach_deg, dele_ach_deg, delr_ach_deg, delt_ach_pct = x[14], x[15], x[16], x[17]
         
         norm = math.sqrt(q_b2e[0]**2 + q_b2e[1]**2 + q_b2e[2]**2 + q_b2e[3]**2)
         q_b2e = q_b2e/norm
@@ -33,22 +33,23 @@ class eom_solver:
 
         # Control Routing
         delsb_deg = open_loop_speed_brake()
-        throttle_perc = open_loop_throttle() if cmod.get("linearization_flag") != 'on' else cmod['throttle_percent']
         
         # Engine Interface
-        m_fuel_dot_kgps = vehicle.get_engine_burn_rate(throttle_perc)
+        m_fuel_dot_kgps = vehicle.get_engine_burn_rate(delt_ach_pct)
         
         # Trim & Linearization Overrides
-        dela_ach_deg_old, dele_ach_deg_old, delr_ach_deg_old = dela_ach_deg, dele_ach_deg, delr_ach_deg
+        dela_ach_deg_old, dele_ach_deg_old, delr_ach_deg_old, delt_ach_pct_old = dela_ach_deg, dele_ach_deg, delr_ach_deg, delt_ach_pct
         if cmod.get("trim_flag"):
             # Surfaces fixed
             dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = dela_ach_deg, dele_ach_deg, delr_ach_deg
+            delt_cmd_pct = delt_ach_pct
         elif cmod.get("linearization_flag"):
             # Commanded values
             dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = cmod['dela_cmd_deg'], cmod['dele_cmd_deg'], cmod['delr_cmd_deg']
+            delt_cmd_pct = cmod['delt_cmd_pct']
         else:
             # Require the vehicle or SAS object to return control deflections
-            dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = vehicle.get_sas_commands(t, x, cmod, u_trim)
+            dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, delt_cmd_pct = vehicle.get_sas_commands(t, x, cmod, u_trim)
         
         if cmod.get("type") == "time_history":
             dela_ach_deg, dele_ach_deg, delr_ach_deg = dela_cmd_deg, dele_cmd_deg, delr_cmd_deg
@@ -123,7 +124,7 @@ class eom_solver:
         
         # Vehicle returns mapped body forces
         Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2 = vehicle.get_forces_and_moments(alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps,
-                                                                                                                    p_air_b_rps, q_air_b_rps, r_air_b_rps, dele_ach_deg, dela_ach_deg, delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake)
+                                                                                                                    p_air_b_rps, q_air_b_rps, r_air_b_rps, dele_ach_deg, dela_ach_deg, delr_ach_deg, delsb_deg, delt_ach_pct, C_w2b, speedbrake, h_m)
 
         # omega_ib_b_rps is the inertial body rate. The Coriolis acceleration for 
         # Earth-relative velocity tracked in the body frame requires (omega_ib + omega_ie) x V
@@ -195,12 +196,15 @@ class eom_solver:
 
         # Navigation (Cartesian Velocity Integration)
         dx[10:13] = C_b2e @ np.array([u_b_mps, v_b_mps, w_b_mps])
+        
+        # Fuel
+        dx[13] = -m_fuel_dot_kgps
 
-        # Actuation & Fuel
-        dx[13] = vehicle.aileron_kinematics(dela_cmd_deg, dela_ach_deg_old)
-        dx[14] = vehicle.elevator_kinematics(dele_cmd_deg, dele_ach_deg_old)
-        dx[15] = vehicle.rudder_kinematics(delr_cmd_deg, delr_ach_deg_old)
-        dx[16] = -m_fuel_dot_kgps
+        # Actuation
+        dx[14] = vehicle.aileron_kinematics(dela_cmd_deg, dela_ach_deg_old)
+        dx[15] = vehicle.elevator_kinematics(dele_cmd_deg, dele_ach_deg_old)
+        dx[16] = vehicle.rudder_kinematics(delr_cmd_deg, delr_ach_deg_old)
+        dx[17] = vehicle.throttle_kinematics(delt_cmd_pct, delt_ach_pct_old)
 
         # Nav-Relative Body Rates
         v_e_mps = dx[10:13]
@@ -217,7 +221,7 @@ class eom_solver:
         omega_nb_b_rps = omega_ib_b_rps - omega_in_b_rps
 
         # Aux Data Output
-        auxillary_data[0:4] = [dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, throttle_perc]
+        auxillary_data[0:4] = [dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, delt_cmd_pct]
         auxillary_data[4:7] = omega_nb_b_rps
         auxillary_data[7:10] = [Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2]
         auxillary_data[10:13] = [l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2]
@@ -285,10 +289,17 @@ class eom_solver:
         g_vecs = np.array([self.earth_model.get_gravity_ecef(x, y, z) for x, y, z in zip(x_e, y_e, z_e)])
         g_mag_mps2 = np.linalg.norm(g_vecs, axis=1)
 
-        # Extract Euler Angles from C_b2n (Vectorized)
+        # Calculate Euler angles directly from the DCM
+        # These will produce 'raw' angles with jump discontinuities at the branch cuts
         phi_rad   = np.arctan2(C_b2n[:, 2, 1], C_b2n[:, 2, 2])
         theta_rad = np.arcsin(np.clip(-C_b2n[:, 2, 0], -1.0, 1.0))
         psi_rad   = np.arctan2(C_b2n[:, 1, 0], C_b2n[:, 0, 0])
+
+        # Apply global unwrapping to smooth the trajectories
+        # This relies on the time-series continuity, not on switching calculation methods.
+        # phi_rad   = np.unwrap(phi_rad)
+        # psi_rad   = np.unwrap(psi_rad)
+        # theta_rad = np.unwrap(theta_rad)
         
         # Nav Velocities
         vel_b = np.stack([u_b_mps, v_b_mps, w_b_mps], axis=1) # (nt, 3)
@@ -311,7 +322,7 @@ class eom_solver:
             p_b_rps=p_b_rps, q_b_rps=q_b_rps, r_b_rps=r_b_rps,
             q0=q_b2e[0,:], q1=q_b2e[1,:], q2=q_b2e[2,:], q3=q_b2e[3,:],
             lat_rad=lat_rad, long_rad=long_rad, h_m=h_m,
-            m_fuel_kg=x[16, :],
+            m_fuel_kg=x[13, :],
             
             phi_rad=phi_rad, theta_rad=theta_rad, psi_rad=psi_rad,
             phi_dot_rps=phi_dot_rps, theta_dot_rps=theta_dot_rps, psi_dot_rps=psi_dot_rps,
@@ -326,9 +337,10 @@ class eom_solver:
             Fx_b_kgmps2=auxillary_data[7, :], Fy_b_kgmps2=auxillary_data[8, :], Fz_b_kgmps2=auxillary_data[9, :],
             l_b_kgm2ps2=auxillary_data[10, :], m_b_kgm2ps2=auxillary_data[11, :], n_b_kgm2ps2=auxillary_data[12, :],
             
-            dela_ach_deg=x[13, :], dele_ach_deg=x[14, :], delr_ach_deg=x[15, :],
+            dela_ach_deg=x[14, :], dele_ach_deg=x[15, :],
+            delr_ach_deg=x[16, :], delt_ach_pct=x[17, :],
             dela_cmd_deg=auxillary_data[0, :], dele_cmd_deg=auxillary_data[1, :],
-            delr_cmd_deg=auxillary_data[2, :], delt_percent=auxillary_data[3, :],
+            delr_cmd_deg=auxillary_data[2, :], delt_cmd_pct=auxillary_data[3, :],
             
             W_N_mps=W_n_mps[0, :], W_E_mps=W_n_mps[1, :], W_D_mps=W_n_mps[2, :]
         )

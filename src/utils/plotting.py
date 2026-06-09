@@ -53,6 +53,7 @@ class SimulatorPlotter:
             'dela_ach': _get_val(data, 'dela_ach_deg'),
             'dele_ach': _get_val(data, 'dele_ach_deg'),
             'delr_ach': _get_val(data, 'delr_ach_deg'),
+            'delt_ach': _get_val(data, 'delt_ach_pct'),
             'mach': _get_val(data, 'mach'),
             'alpha': _get_val(data, 'alpha_rad') * R2D,
             'beta': _get_val(data, 'beta_rad') * R2D,
@@ -66,7 +67,7 @@ class SimulatorPlotter:
             'dela_cmd': _get_val(data, 'dela_cmd_deg'),
             'dele_cmd': _get_val(data, 'dele_cmd_deg'),
             'delr_cmd': _get_val(data, 'delr_cmd_deg'),
-            'throttle': _get_val(data, 'delt_percent')
+            'delt_cmd': _get_val(data, 'delt_cmd_pct'),
         }
 
     def _get_comparison_data(self, idx, key, error):
@@ -239,8 +240,8 @@ class SimulatorPlotter:
     def plot_controls(self, filename="controls", show=False, error=False):
         fig, axes = self._setup_figure("Actuation & Controls", 2, 2, (10, 6), error)
         
-        ach_keys = ['dela_ach', 'dele_ach', 'delr_ach', 'throttle']
-        cmd_keys = ['dela_cmd', 'dele_cmd', 'delr_cmd', None]
+        ach_keys = ['dela_ach', 'dele_ach', 'delr_ach', 'delt_ach']
+        cmd_keys = ['dela_cmd', 'dele_cmd', 'delr_cmd', 'delt_cmd']
         labels = ['Aileron [deg]', 'Elevator [deg]', 'Rudder [deg]', 'Throttle [%]']
         
         for i, ax in enumerate(axes.flatten()):

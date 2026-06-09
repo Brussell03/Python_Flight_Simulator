@@ -89,3 +89,24 @@ class EarthModel:
 
     def get_earth_rate_ecef(self) -> np.ndarray:
         return np.array([0.0, 0.0, self.omega_rps], dtype=np.float64)
+    
+    def wgs84_to_cartesian(self, lat_rad: float, long_rad: float, h_m: float):
+        sin_lat, cos_lat = math.sin(lat_rad), math.cos(lat_rad)
+        sin_lon, cos_lon = math.sin(long_rad), math.cos(long_rad)
+        
+        N = self.a / math.sqrt(1.0 - self.e_sq * sin_lat**2)
+        x_e = (N + h_m) * cos_lat * cos_lon
+        y_e = (N + h_m) * cos_lat * sin_lon
+        z_e = (N * (1.0 - self.e_sq) + h_m) * sin_lat
+        
+        return x_e, y_e, z_e
+    
+    def cartesian_to_wgs84(self, lat_rad: float, long_rad: float, h_m: float):
+        sin_lat, cos_lat = math.sin(lat_rad), math.cos(lat_rad)
+        sin_lon, cos_lon = math.sin(long_rad), math.cos(long_rad)
+        N = self.a / math.sqrt(1.0 - self.e_sq * sin_lat**2)
+        x_e_m = (N + h_m) * cos_lat * cos_lon
+        y_e_m = (N + h_m) * cos_lat * sin_lon
+        z_e_m = (N * (1.0 - self.e_sq) + h_m) * sin_lat
+        
+        return x_e_m, y_e_m, z_e_m

@@ -9,7 +9,7 @@ class Brick(DAVEVehicle):
         
     def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
                                p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake):
+                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
         
         # Set inputs
         self.set_var_val(self.true_airspeed_ref, true_airspeed_mps)
@@ -34,5 +34,5 @@ class DraglessBrick(DAVEVehicle):
     
     def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
                                p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake):
+                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
         return 0, 0, 0, 0, 0, 0

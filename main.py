@@ -25,26 +25,24 @@ def run_job(input_path):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
     
     # 1. Initialization
-    eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
+    eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
     
     job_name = meta_cfg['job_name']
     
     t0_s, tf_s, dt_s = instruction_cfg['t0_s'], instruction_cfg['tf_s'], instruction_cfg['dt_s']
-    state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
+    state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'm_fuel', 'dela', 'dele', 'delr', 'delt']
     
     # 2. Trim & Analysis Dispatch
     u_trim = np.zeros(4)
     if instruction_cfg.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
-        x_trim, u_trim, msg = trim_solver(eom, vehicle, control_cfg, trim_cfg, x0)
+        x_trim, u_trim, msg = trim_solver(eom, vehicle, amod, control_cfg, trim_cfg, x0)
         
         if x_trim is not None:
             x0 = x_trim # Override initial conditions with trim state
             
             if instruction_cfg.get('perform_linearization', False):
                 print("\n--- Executing Linearization ---")
-                
-                state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'dela', 'dele', 'delr', 'm_fuel']
                 
                 A, B, core_state_names, core_control_names = compute_state_space(x_trim, u_trim, vehicle, control_cfg, state_names)
                 

@@ -153,8 +153,8 @@ class X15(Vehicle):
         Jyy_b_kgm2 = fastInterp1(mass_bps, self.Jyy_kgm2_v_mass_kg, m_total_kg)
         Jzz_b_kgm2 = fastInterp1(mass_bps, self.Jzz_kgm2_v_mass_kg, m_total_kg)
         Jxz_b_kgm2 = fastInterp1(mass_bps, self.Jxz_kgm2_v_mass_kg, m_total_kg)
-        Jxy_b_kgm2 = self.get_si_val(self.Jxy_def)
-        Jyz_b_kgm2 = self.get_si_val(self.Jyz_def)
+        Jxy_b_kgm2 = 0
+        Jyz_b_kgm2 = 0
         
         # Jxx_b_slugft2 = 3600
         # Jxx_b_kgm2 = Jxx_b_slugft2*1.355
@@ -218,7 +218,7 @@ class X15(Vehicle):
 
     def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
                                p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake):
+                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
         """
         Calculates full dimensional aerodynamic forces and moments mapped to the body frame.
         Applies engine jet damping and wind-to-body transformations natively.
@@ -331,18 +331,18 @@ class X15(Vehicle):
 
     def get_trim_values(self, trim_list):
         if trim_list is None:
-            return 0, 0, 0
-        return trim_list[:3]
+            return 0, 0, 0, 0
+        return trim_list[:4]
 
     def get_sas_commands(self, t, x, cmod, u_trim):
         """
         Routes the Stability Augmentation System and superimposes commands over trim baseline.
-        u_trim is expected as [dela_trim, dele_trim, delr_trim, throttle_trim]
+        u_trim is expected as [dela_trim, dele_trim, delr_trim, delt_trim]
         """
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
         # Extract trim baselines
-        dela_trim_deg, dele_trim_deg, delr_trim_deg = self.get_trim_values(u_trim)
+        dela_trim_deg, dele_trim_deg, delr_trim_deg, delt_trim_pct = self.get_trim_values(u_trim)
         
         # Calculate dynamic commands (Stick + Feedback)
         dela_dynamic_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)
@@ -353,8 +353,9 @@ class X15(Vehicle):
         dela_cmd_deg = dela_trim_deg + dela_dynamic_deg
         dele_cmd_deg = dele_trim_deg + dele_dynamic_deg
         delr_cmd_deg = delr_trim_deg + delr_dynamic_deg
+        delt_cmd_pct = delt_trim_pct
         
-        return dela_cmd_deg, dele_cmd_deg, delr_cmd_deg
+        return dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, delt_cmd_pct
     
     def actuator_kinematics(self, cmd_deg, ach_deg, tau_s, pos_lims, rate_lim_dps, dt=None):
         """
@@ -388,3 +389,6 @@ class X15(Vehicle):
     
     def rudder_kinematics(self, delr_cmd_deg, delr_ach_deg):
         return self.actuator_kinematics(delr_cmd_deg, delr_ach_deg, self.tau_r_s, self.lim_r_pos_deg, self.lim_r_rate_dps)
+    
+    def throttle_kinematics(self, delt_cmd_pctg, delt_ach_pct):
+        return 0.0

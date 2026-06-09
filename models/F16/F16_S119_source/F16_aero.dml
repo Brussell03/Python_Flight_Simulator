@@ -289,60 +289,55 @@ return
   <!--  Input variables   -->
   <!-- ================== -->
 
-  <variableDef name="trueAirspeed" varID="vt" units="ft_s" symbol="V" minValue="0.1">
+  <variableDef name="trueAirspeed" varID="vt" units="ft_s" symbol="V" minValue="0.1" initialValue="0.0">
     <description> True airspeed, ft/sec </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="angleOfAttack" varID="alpha" units="deg" symbol="&#x3B1;">
+  <variableDef name="angleOfAttack" varID="alpha" units="deg" symbol="&#x3B1;" initialValue="0.0">
     <description> Instantaneous true angle-of-attack, in degrees </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="angleOfSideslip" varID="beta" units="deg" symbol="&#x3B2;"
-               sign="wind in right ear">
+  <variableDef name="angleOfSideslip" varID="beta" units="deg" symbol="&#x3B2;" sign="wind in right ear" initialValue="0.0">
     <description> Instantaneous true angle-of-sideslip, in degrees </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="bodyAngularRate_Roll" varID="p" units="rad_s" sign="right wing down"
-               symbol="p">
+  <variableDef name="bodyAngularRate_Roll" varID="p" units="rad_s" sign="right wing down" symbol="p" initialValue="0.0">
     <description> Body roll rate, rad/sec </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="bodyAngularRate_Pitch" varID="q" units="rad_s" sign="aircraft nose up"
-               symbol="q">
+  <variableDef name="bodyAngularRate_Pitch" varID="q" units="rad_s" sign="aircraft nose up" symbol="q" initialValue="0.0">
     <description> Body pitch rate, rad/sec </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="bodyAngularRate_Yaw" varID="r" units="rad_s" sign="aircraft nose right"
-               symbol="r">
+  <variableDef name="bodyAngularRate_Yaw" varID="r" units="rad_s" sign="aircraft nose right" symbol="r" initialValue="0.0">
     <description> Body yaw rate, rad/sec </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="elevatorDeflection" varID="el" units="deg" sign="trailing edge down"
-               symbol="&#x3B4;e">
+  <variableDef name="elevatorDeflection" varID="el" units="deg" sign="trailing edge down" symbol="&#x3B4;e" initialValue="0.0">
     <description> Elevator deflection angle, in degrees (+TED) </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="aileronDeflection" varID="ail" units="deg" sign="left roll" symbol="&#x3B4;a">
+  <variableDef name="aileronDeflection" varID="ail" units="deg" sign="left roll" symbol="&#x3B4;a" initialValue="0.0">
     <description> Aileron deflection angle, in degrees (+LWD) </description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="rudderDeflection" varID="rdr" units="deg" sign="TEL" symbol="&#x3B4;r">
+  <variableDef name="rudderDeflection" varID="rdr" units="deg" sign="TEL" symbol="&#x3B4;r" initialValue="0.0">
     <description> Rudder deflection angle, in degrees (+TEL) </description>
     <isInput/>
     <isStdAIAA/>
@@ -1134,17 +1129,15 @@ return
           <bpRef bpID="ALPHA1"/>
         </breakpointRefs>
         <dataTable>
-          <!-- Note: last breakpoint (alpha) changes most rapidly -->
-          <!-- -10    -5     0     5    10    15    20    25    30    35    40    45         Alpha       -->
-          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., <!-- |Beta| =  0. --> .018,
+          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., .018,
           .019, .018, .019, .019, .018, .013, .007, .004,-.014,-.017,-.033,
-          <!-- |Beta| =  5. --> .038, .042, .042, .042, .043, .039, .030, .017,
-          .004,-.035,-.047,-.057, <!-- |Beta| = 10. --> .056, .057, .059, .058, .058,
-          .053, .032, .012, .002,-.046,-.071,-.073, <!-- |Beta| = 15. --> .064, .077,
+          .038, .042, .042, .042, .043, .039, .030, .017,
+          .004,-.035,-.047,-.057, .056, .057, .059, .058, .058,
+          .053, .032, .012, .002,-.046,-.071,-.073, .064, .077,
           .076, .074, .073, .057, .029, .007, .012,-.034,-.065,-.041,
-          <!-- |Beta| = 20. --> .074, .086, .093, .089, .080, .062, .049, .022,
-          .028,-.012,-.002,-.013, <!-- |Beta| = 25. --> .079, .090, .106, .106, .096,
-          .080, .068, .030, .064, .015, .011,-.001 <!-- |Beta| = 30. -->
+          .074, .086, .093, .089, .080, .062, .049, .022,
+          .028,-.012,-.002,-.013, .079, .090, .106, .106, .096,
+          .080, .068, .030, .064, .015, .011, -.001
         </dataTable>
       </griddedTableDef>
     </functionDefn>
@@ -1421,18 +1414,16 @@ return
           <bpRef bpID="ALPHA1"/>
         </breakpointRefs>
         <dataTable>
-          <!-- Note: last breakpoint (alpha) changes most rapidly -->
-          <!-- -10     -5      0      5     10     15     20     25     30     35     40     45        Alpha        -->
           -.041, -.052, -.053, -.056, -.050, -.056, -.082, -.059, -.042, -.038, -.027,
-          -.017, <!-- Beta = -30.0 --> -.041, -.053, -.053, -.053, -.050, -.051, -.066,
-          -.043, -.038, -.027, -.023, -.016, <!-- Beta = -20.0 --> -.042, -.053, -.052,
+          -.017, -.041, -.053, -.053, -.053, -.050, -.051, -.066,
+          -.043, -.038, -.027, -.023, -.016, -.042, -.053, -.052,
           -.051, -.049, -.049, -.043, -.035, -.026, -.016, -.018, -.014,
-          <!-- Beta = -10.0 --> -.040, -.052, -.051, -.052, -.048, -.048, -.042, -.037,
-          -.031, -.026, -.017, -.012, <!-- Beta =   0.0 --> -.043, -.049, -.048, -.049,
-          -.043, -.042, -.042, -.036, -.025, -.021, -.016, -.011, <!-- Beta = +10.0 -->
+          -.040, -.052, -.051, -.052, -.048, -.048, -.042, -.037,
+          -.031, -.026, -.017, -.012, -.043, -.049, -.048, -.049,
+          -.043, -.042, -.042, -.036, -.025, -.021, -.016, -.011,
           -.044, -.048, -.048, -.047, -.042, -.041, -.020, -.028, -.013, -.014, -.011,
-          -.010, <!-- Beta = +20.0 --> -.043, -.049, -.047, -.045, -.042, -.037, -.003,
-          -.013, -.010, -.003, -.007, -.008 <!-- Beta = +30.0 -->
+          -.010, -.043, -.049, -.047, -.045, -.042, -.037, -.003,
+          -.013, -.010, -.003, -.007, -.008
         </dataTable>
       </griddedTableDef>
     </functionDefn>
@@ -1462,17 +1453,15 @@ return
           <bpRef bpID="ALPHA1"/>
         </breakpointRefs>
         <dataTable>
-          <!-- Note: last breakpoint (alpha) changes most rapidly -->
-          <!-- -10     -5      0      5     10     15     20     25     30     35     40     45        Alpha        -->
           .005, .017, .014, .010, -.005, .009, .019, .005, .000, -.005, -.011, .008,
-          <!-- Beta = -30.0 --> .007, .016, .014, .014, .013, .009, .012, .005, .000,
-          .004, .009, .007, <!-- Beta = -20.0 --> .013, .013, .011, .012, .011, .009,
-          .008, .005, .000, .005, .003, .005, <!-- Beta = -10.0 --> .018, .015, .015,
-          .014, .014, .014, .014, .015, .013, .011, .006, .001, <!-- Beta =   0.0 -->
+          .007, .016, .014, .014, .013, .009, .012, .005, .000,
+          .004, .009, .007, .013, .013, .011, .012, .011, .009,
+          .008, .005, .000, .005, .003, .005, .018, .015, .015,
+          .014, .014, .014, .014, .015, .013, .011, .006, .001,
           .015, .014, .013, .013, .012, .011, .011, .010, .008, .008, .007, .003,
-          <!-- Beta = +10.0 --> .021, .011, .010, .011, .010, .009, .008, .010, .006,
-          .005, .000, .001, <!-- Beta = +20.0 --> .023, .010, .011, .011, .011, .010,
-          .008, .010, .006, .014, .020, .000, <!-- Beta = +30.0 -->
+          .021, .011, .010, .011, .010, .009, .008, .010, .006,
+          .005, .000, .001, .023, .010, .011, .011, .011, .010,
+          .008, .010, .006, .014, .020, .000,
         </dataTable>
       </griddedTableDef>
     </functionDefn>
@@ -1502,18 +1491,15 @@ return
           <bpRef bpID="ALPHA1"/>
         </breakpointRefs>
         <dataTable>
-          <!-- Note: last breakpoint (alpha) changes most rapidly -->
-          <!-- -10     -5      0      5     10     15     20     25     30     35     40     45        Alpha        -->
           .001, -.027, -.017, -.013, -.012, -.016, .001, .017, .011, .017, .008, .016,
-          <!-- Beta = -30.0 --> .002, -.014, -.016, -.016, -.014, -.019, -.021, .002,
-          .012, .016, .015, .011, <!-- Beta = -20.0 --> -.006, -.008, -.006, -.006, -.005,
-          -.008, -.005, .007, .004, .007, .006, .006, <!-- Beta = -10.0 --> -.011, -.011,
+          .002, -.014, -.016, -.016, -.014, -.019, -.021, .002,
+          .012, .016, .015, .011, -.006, -.008, -.006, -.006, -.005,
+          -.008, -.005, .007, .004, .007, .006, .006, -.011, -.011,
           -.010, -.009, -.008, -.006, .000, .004, .007, .010, .004, .010,
-          <!-- Beta =   0.0 --> -.015, -.015, -.014, -.012, -.011, -.008, -.002, .002,
-          .006, .012, .011, .011, <!-- Beta = +10.0 --> -.024, -.010, -.004, -.002, -.001,
-          .003, .014, .006, -.001, .004, .004, .006, <!-- Beta = +20.0 --> -.022, .002,
+          -.015, -.015, -.014, -.012, -.011, -.008, -.002, .002,
+          .006, .012, .011, .011, -.024, -.010, -.004, -.002, -.001,
+          .003, .014, .006, -.001, .004, .004, .006, -.022, .002,
           -.003, -.005, -.003, -.001, -.009, -.009, -.001, .003, -.002, .001
-          <!-- Beta = +30.0 -->
         </dataTable>
       </griddedTableDef>
     </functionDefn>
@@ -1543,18 +1529,16 @@ return
           <bpRef bpID="ALPHA1"/>
         </breakpointRefs>
         <dataTable>
-          <!-- Note: last breakpoint (alpha) changes most rapidly -->
-          <!-- -10     -5      0      5     10     15     20     25     30     35     40     45        Alpha        -->
           -.018, -.052, -.052, -.052, -.054, -.049, -.059, -.051, -.030, -.037, -.026,
-          -.013, <!-- Beta = -30.0 --> -.028, -.051, -.043, -.046, -.045, -.049, -.057,
-          -.052, -.030, -.033, -.030, -.008, <!-- Beta = -20.0 --> -.037, -.041, -.038,
+          -.013, -.028, -.051, -.043, -.046, -.045, -.049, -.057,
+          -.052, -.030, -.033, -.030, -.008, -.037, -.041, -.038,
           -.040, -.040, -.038, -.037, -.030, -.027, -.024, -.019, -.013,
-          <!-- Beta = -10.0 --> -.048, -.045, -.045, -.045, -.044, -.045, -.047, -.048,
-          -.049, -.045, -.033, -.016, <!-- Beta =   0.0 --> -.043, -.044, -.041, -.041,
-          -.040, -.038, -.034, -.035, -.035, -.029, -.022, -.009, <!-- Beta = +10.0 -->
+          -.048, -.045, -.045, -.045, -.044, -.045, -.047, -.048,
+          -.049, -.045, -.033, -.016, -.043, -.044, -.041, -.041,
+          -.040, -.038, -.034, -.035, -.035, -.029, -.022, -.009,
           -.052, -.034, -.036, -.036, -.035, -.028, -.024, -.023, -.020, -.016, -.010,
-          -.014, <!-- Beta = +20.0 --> -.062, -.034, -.027, -.028, -.027, -.027, -.023,
-          -.023, -.019, -.009, -.025, -.010 <!-- Beta = +30.0 -->
+          -.014, -.062, -.034, -.027, -.028, -.027, -.027, -.023,
+          -.023, -.019, -.009, -.025, -.010
         </dataTable>
       </griddedTableDef>
     </functionDefn>

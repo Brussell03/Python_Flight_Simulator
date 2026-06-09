@@ -8,6 +8,8 @@ import os
 
 from flightgear_python.fg_if import FDMConnection, CtrlsConnection
 
+from src.utils.constants import M2FT
+
 def ctrls_callback(ctrls_data, event_pipe):
     
     if event_pipe.child_poll():
@@ -51,7 +53,7 @@ def fdm_callback(fdm_data, event_pipe):
         fdm_data['v_down_ft_per_s_parent']   = v_down_ft_per_s_parent
         
     # Return the whole structure
-    return fdm_data  
+    return fdm_data
 
 """
 Start FlightGear with: 
@@ -69,10 +71,7 @@ if __name__ == '__main__':
         sys.exit(1)
     
     # Get Python 6-DOF simulation data
-    data_pysim  = np.load(data_path)
-
-    # Get time and other variables
-    t_s   = data_pysim[:,0]; nt_s = t_s.size
+    sim_data  = np.load(data_path)
     
     ctrls_conn = CtrlsConnection()
     ctrls_event_pipe = ctrls_conn.connect_rx('localhost', 5503, ctrls_callback)
@@ -86,35 +85,36 @@ if __name__ == '__main__':
     fdm_conn.start()
     ctrls_conn.start()
 
+    nt_s = sim_data['t_s'].size
     i = 0
     while i < nt_s:
         
         # Increment time step counter
-        i += 1
+        # i += 1
         
         # Get present altitude
-        v_body_u_parent         = data_pysim[i,1]*3.28 # (converts m/s to ft/s)
-        v_body_v_parent         = data_pysim[i,2]*3.28
-        v_body_w_parent         = data_pysim[i,3]*3.28
+        v_body_u_parent         = sim_data['u_b_mps'][i]*M2FT # (converts m/s to ft/s)
+        v_body_v_parent         = sim_data['v_b_mps'][i]*M2FT
+        v_body_w_parent         = sim_data['w_b_mps'][i]*M2FT
         
         # Geodetic coordinates from states (Indices 11, 12, 13 mapped to x[10], x[11], x[12])
-        lat_rad_parent          = data_pysim[i,11]
-        long_rad_parent         = data_pysim[i,12]
-        alt_m_parent            = data_pysim[i,13]
+        lat_rad_parent          = sim_data['lat_rad'][i]
+        long_rad_parent         = sim_data['long_rad'][i]
+        alt_m_parent            = sim_data['h_m'][i]
         
         # Read reconstructed Euler Angles appended later in the sim_data array
-        phi_rad_parent          = data_pysim[i,31]
-        theta_rad_parent        = data_pysim[i,32]
-        psi_rad_parent          = data_pysim[i,33]
+        phi_rad_parent          = sim_data['phi_rad'][i]
+        theta_rad_parent        = sim_data['theta_rad'][i]
+        psi_rad_parent          = sim_data['psi_rad'][i]
         
-        dela_deg_parent         = data_pysim[i,14]
-        dele_deg_parent         = data_pysim[i,15]
-        delr_deg_parent         = data_pysim[i,16]
-        alpha_rad_parent        = data_pysim[i,21]
-        beta_rad_parent         = data_pysim[i,22]
-        v_north_ft_per_s_parent = data_pysim[i,34]*3.28 # (converts m/s to ft/s)
-        v_east_ft_per_s_parent  = data_pysim[i,35]*3.28
-        v_down_ft_per_s_parent  = data_pysim[i,36]*3.28
+        dela_deg_parent         = sim_data['dela_ach_deg'][i]
+        dele_deg_parent         = sim_data['dele_ach_deg'][i]
+        delr_deg_parent         = sim_data['delr_ach_deg'][i]
+        alpha_rad_parent        = sim_data['alpha_rad'][i]
+        beta_rad_parent         = sim_data['beta_rad'][i]
+        v_north_ft_per_s_parent = sim_data['u_n_mps'][i]*M2FT # (converts m/s to ft/s)
+        v_east_ft_per_s_parent  = sim_data['v_n_mps'][i]*M2FT
+        v_down_ft_per_s_parent  = sim_data['w_n_mps'][i]*M2FT
         
         # Send tuple (could also do `fdm_conn.event_pipe.parent_send` so you just need to pass around `fdm_conn`)
         fdm_event_pipe.parent_send((alt_m_parent, phi_rad_parent, theta_rad_parent, psi_rad_parent, \

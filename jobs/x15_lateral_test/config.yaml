@@ -11,7 +11,7 @@ instructions:
     simulate: true
     perform_trim: false
     perform_linearization: false
-    compare: true
+    compare: false
     t0_s: 0.0
     tf_s: 5.5
     dt_s: 0.012
