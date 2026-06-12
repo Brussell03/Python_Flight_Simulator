@@ -263,13 +263,13 @@ def load_simulation_config(yaml_path):
     
     m_fuel_kg = init_cond_cfg.get('m_fuel_kg', 0)
     
-    dela_ach_deg = init_cond_cfg.get('dela_ach_deg', 0)
-    dele_ach_deg = init_cond_cfg.get('dele_ach_deg', 0)
-    delr_ach_deg = init_cond_cfg.get('delr_ach_deg', 0)
+    dela_ach_rad = init_cond_cfg.get('dela_ach_deg') * D2R if init_cond_cfg.get('dela_ach_deg') is not None else init_cond_cfg.get('dela_ach_rad', 0.0)
+    dele_ach_rad = init_cond_cfg.get('dele_ach_deg') * D2R if init_cond_cfg.get('dele_ach_deg') is not None else init_cond_cfg.get('dele_ach_rad', 0.0)
+    delr_ach_rad = init_cond_cfg.get('delr_ach_deg') * D2R if init_cond_cfg.get('delr_ach_deg') is not None else init_cond_cfg.get('delr_ach_rad', 0.0)
     delt_ach_pct = init_cond_cfg.get('delt_ach_pct', 0)
     
     # Convert Geodetic (Lat, Lon, Alt) to ECEF (X, Y, Z)
-    x0_e, y0_e, z0_e = earth.wgs84_to_cartesian(lat0_rad, long0_rad, h0_m)
+    x0_e, y0_e, z0_e = earth.geodetic_to_ecef(lat0_rad, long0_rad, h0_m)
     
     # Convert Initial Quaternions from Nav-to-Body to ECEF-to-Body
     # quat_body_to_nav returns C_b2n. The transpose is C_n2b.
@@ -286,7 +286,7 @@ def load_simulation_config(yaml_path):
         q0_e, q1_e, q2_e, q3_e,
         x0_e, y0_e, z0_e,
         m_fuel_kg,
-        dela_ach_deg, dele_ach_deg, delr_ach_deg, delt_ach_pct
+        dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct
     ]
     
     print("Initial vehicle state:")
@@ -309,9 +309,9 @@ def load_simulation_config(yaml_path):
     print(f"y0_e: {y0_e:.8f}")
     print(f"z0_e: {z0_e:.8f}")
     print(f"m_fuel_kg: {m_fuel_kg:.8f}")
-    print(f"dela_ach_deg: {dela_ach_deg:.8f}")
-    print(f"dele_ach_deg: {dele_ach_deg:.8f}")
-    print(f"delr_ach_deg: {delr_ach_deg:.8f}")
+    print(f"dela_ach_deg: {dela_ach_rad*R2D:.8f}")
+    print(f"dele_ach_deg: {dele_ach_rad*R2D:.8f}")
+    print(f"delr_ach_deg: {delr_ach_rad*R2D:.8f}")
     print(f"delt_ach_pct: {delt_ach_pct:.8f}")
 
     return eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model

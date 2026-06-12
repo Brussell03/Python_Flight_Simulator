@@ -10,12 +10,12 @@ instructions:
     earth_model: "WGS84"
     gravity_type: "J2"
     integrator: "RK45"
-    simulate: true
+    simulate: false
     wind: false
     perform_trim: true
     compare: true
     t0_s: 0.0
-    tf_s: 180.0
+    tf_s: 20.0
     dt_s: 0.012
 
 output:
@@ -34,7 +34,7 @@ compare:
     save_compare: true
     plot_values: true
     show_values: true
-    plot_error: true
+    plot_error: false
     show_error: false
     plots:
         6dof: true
@@ -56,9 +56,15 @@ initial_conditions:
     p_dps: 0
     q_dps: 0
     r_dps: 0
-    phi_deg: -0.17183011
+    phi_deg: 0
     theta_deg: 2.643330876
     psi_deg: 45
 
 trim:
     trim_mode: "straight_and_level"
+
+control:
+    sas: true
+    speedbrake: false
+    ap: false
+    circumnavigator: false

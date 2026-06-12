@@ -22,8 +22,10 @@ class UnitConverter:
         'rad': 1.0,
         '_rad': 1.0,
         'rad_s': 1.0,
+        'nmi_h': 0.51444444,
         'nd': 1.0,
         'pct': 1.0,
+        'frac': 1.0,
         'none': 1.0,
         '': 1.0
     }
@@ -37,21 +39,25 @@ class UnitConverter:
         return unit_str.lower().replace(' ', '').replace('-', '').replace('*', '')
 
     @classmethod
-    def to_si(cls, value: float, unit_str: str) -> float:
+    def to_si(cls, value: float, unit_str: str, log: bool = False) -> float:
         """Converts a value from DAVE-ML units into SI units."""
         clean_unit = cls._clean_unit(unit_str)
         
         if clean_unit not in cls.TO_SI:
             raise ValueError(f"UnitConverter missing definition for DAVE-ML unit: '{unit_str}' (Parsed as '{clean_unit}')")
-            
+        
+        if log:
+            print(f"unit_str: {unit_str} converted by {cls.TO_SI[clean_unit]}")
         return value * cls.TO_SI[clean_unit]
 
     @classmethod
-    def from_si(cls, value: float, unit_str: str) -> float:
+    def from_si(cls, value: float, unit_str: str, log: bool = False) -> float:
         """Converts an SI value from the EOM solver into the target DAVE-ML unit."""
         clean_unit = cls._clean_unit(unit_str)
         
         if clean_unit not in cls.TO_SI:
             raise ValueError(f"UnitConverter missing definition for DAVE-ML unit: '{unit_str}' (Parsed as '{clean_unit}')")
-            
+        
+        if log:
+            print(f"unit_str: {unit_str} converted by {cls.TO_SI[clean_unit]}")
         return value / cls.TO_SI[clean_unit]

@@ -1,6 +1,6 @@
 meta:
-    job_name: "X15_Descending_Turn"
-    description: "X-15 Mach 2.4 Descending Turn with Trim"
+    job_name: "X15_Trim_Test"
+    description: "X-15 Mach 2.4 Level Trim"
 
 vehicle:
     model: "X15"
@@ -17,7 +17,7 @@ instructions:
     dt_s: 0.005
 
 output:
-    save_data: false
+    save_data: true
     show_plots: true
     plots:
         6dof: true
@@ -29,11 +29,11 @@ output:
 
 initial_conditions:
     Mach: 2.4
-    alpha_deg: 1.0
+    alpha_deg: 0.0
     beta_deg: 0.0
     h_m: 16500.0
     phi_deg: 0.0
-    theta_deg: 1.0
+    theta_deg: 0.0
     psi_deg: 0.0
     dela_ach_deg: 0.0
     dele_ach_deg: 0.0
@@ -43,22 +43,7 @@ initial_conditions:
     m_fuel_kg: 0.0
 
 trim:
-    trim_mode: "descending_turn"
-    # alpha_deg: 0
-    # beta_deg: 0
-    # h_m: 16500.0
-    # p_dps: 0
-    # q_dps: 0
-    # r_dps: 0
-    # phi_deg: 0
-    theta_deg: -9
-    # psi_deg: 0.0
-    # phidot_dps: 0
-    # thetadot_dps: 0
-    psidot_dps: 2.0
-    dela_ach_deg: -1.0
-    dele_ach_deg: -1.0
-    delr_ach_deg: 1.0
+    trim_mode: "steady_glide"
 
 control:
     type: "doublet"

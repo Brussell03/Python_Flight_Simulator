@@ -17,8 +17,8 @@ instructions:
     dt_s: 0.012
 
 output:
-    save_data: true
-    show_plots: false
+    save_data: false
+    show_plots: true
     plots:
         6dof: true
         attitude: true

@@ -9,7 +9,7 @@ vehicle:
 instructions:
     earth_model: "WGS84"
     gravity_type: "J2"
-    integrator: "RK45"
+    integrator: "RK4"
     simulate: true
     wind: false
     perform_trim: true
@@ -20,7 +20,7 @@ instructions:
 
 output:
     save_data: true
-    show_plots: false
+    show_plots: true
     plots:
         6dof: true
         attitude: true
@@ -47,3 +47,9 @@ initial_conditions:
 
 trim:
     trim_mode: "straight_and_level"
+
+control:
+    sas: true
+    speedbrake: false
+    ap: false
+    circumnavigator: false

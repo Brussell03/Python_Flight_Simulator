@@ -52,13 +52,13 @@ class SimData:
     m_b_kgm2ps2: np.ndarray         # net external aerodynamic and propulsive pitching moment about body fixed y-axis [N*m]
     n_b_kgm2ps2: np.ndarray         # net external aerodynamic and propulsive yawing moment about body fixed z-axis [N*m]
     
-    dela_ach_deg: np.ndarray        # actual achieved aileron surface deflection angle [deg]
-    dele_ach_deg: np.ndarray        # actual achieved elevator surface deflection angle [deg]
-    delr_ach_deg: np.ndarray        # actual achieved rudder surface deflection angle [deg]
+    dela_ach_rad: np.ndarray        # actual achieved aileron surface deflection angle [rad]
+    dele_ach_rad: np.ndarray        # actual achieved elevator surface deflection angle [rad]
+    delr_ach_rad: np.ndarray        # actual achieved rudder surface deflection angle [rad]
     delt_ach_pct: np.ndarray        # actual achieved engine throttle [0.0 to 100.0%]
-    dela_cmd_deg: np.ndarray        # commanded aileron surface deflection angle from flight control system [deg]
-    dele_cmd_deg: np.ndarray        # commanded elevator surface deflection angle from flight control system [deg]
-    delr_cmd_deg: np.ndarray        # commanded rudder surface deflection angle from flight control system [deg]
+    dela_cmd_rad: np.ndarray        # commanded aileron surface deflection angle from flight control system [rad]
+    dele_cmd_rad: np.ndarray        # commanded elevator surface deflection angle from flight control system [rad]
+    delr_cmd_rad: np.ndarray        # commanded rudder surface deflection angle from flight control system [rad]
     delt_cmd_pct: np.ndarray        # engine throttle lever position command [0.0 to 100.0%]
     
     # Optional Wind Parameters (Default to None to avoid breaking previous initializations)

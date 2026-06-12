@@ -11,7 +11,7 @@ from models.X15.aerodynamics.pitch_coef_X15 import Cm_X15
 from models.X15.aerodynamics.yaw_coef_X15 import Cn_X15
 from models.X15.engine.XLR99 import calculate_fuel_burn_rate
 
-from src.utils.constants import FT2M, LB2KG, R2D
+from src.utils.constants import D2R, FT2M, LB2KG, R2D
 from src.utils.interpolators import fastInterp1, fastInterp2
 
 class X15(Vehicle):
@@ -30,15 +30,15 @@ class X15(Vehicle):
         self.tau_e_s = 0.1
         self.tau_r_s = 0.1
         
-        # Actuation Position Limits [min_deg, max_deg]
-        self.lim_a_pos_deg = [-15.0, 15.0]  # Differential tail roll limit
-        self.lim_e_pos_deg = [-35.0, 15.0]  # Pitch limit (usually more trailing-edge up authority)
-        self.lim_r_pos_deg = [-7.5, 7.5]    # Rudder limit
+        # Actuation Position Limits [min_rad, max_rad]
+        self.lim_a_pos_rad = np.array([-15.0, 15.0]) * D2R  # Differential tail roll limit
+        self.lim_e_pos_rad = np.array([-35.0, 15.0]) * D2R  # Pitch limit (usually more trailing-edge up authority)
+        self.lim_r_pos_rad = np.array([-7.5, 7.5]) * D2R    # Rudder limit
         
-        # Actuation Rate Limits [deg/s]
-        self.lim_a_rate_dps = 50.0
-        self.lim_e_rate_dps = 50.0
-        self.lim_r_rate_dps = 50.0
+        # Actuation Rate Limits [rad/s]
+        self.lim_a_rate_rps = 50.0 * D2R
+        self.lim_e_rate_rps = 50.0 * D2R
+        self.lim_r_rate_rps = 50.0 * D2R
         
         # --- Time History Data ---
         self.time_history_s = None
@@ -73,7 +73,7 @@ class X15(Vehicle):
         Extracts arrays from a dictionary-structured .npy file.
         Expects keys: 'time', 'elevator', 'aileron', 'rudder'.
         """
-        time_hist_data            = pd.read_csv(path, header=0)
+        time_hist_data                 = pd.read_csv(path, header=0)
         self.time_history_s            = time_hist_data.get('x').values if time_hist_data.get('x') is not None else None
         self.elevator_time_history_deg = time_hist_data.get('dele_deg_vs_time_s').values if time_hist_data.get('dele_deg_vs_time_s') is not None else None
         self.aileron_time_history_deg  = time_hist_data.get('dela_deg_vs_time_s').values if time_hist_data.get('dela_deg_vs_time_s') is not None else None
@@ -217,13 +217,16 @@ class X15(Vehicle):
         return calculate_fuel_burn_rate(throttle_perc)
 
     def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
-                               p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
+                               p_b_rps, q_b_rps, r_b_rps, dele_ach_rad, dela_ach_rad, 
+                               delr_ach_rad, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
         """
         Calculates full dimensional aerodynamic forces and moments mapped to the body frame.
         Applies engine jet damping and wind-to-body transformations natively.
         """
         alpha_deg = alpha_rad * R2D
+        dela_ach_deg = dela_ach_rad * R2D
+        dele_ach_deg = dele_ach_rad * R2D
+        delr_ach_deg = delr_ach_rad * R2D
         
         # Angle of attack / sideslip rates (static constraint for rigid body buildup)
         alphadot_rps = 0.0
@@ -236,8 +239,8 @@ class X15(Vehicle):
          Cnbeta_prad, Cnp_prps, Cnr_prps, Cndela_pdeg, Cndelr_pdeg) = self.get_aero_coeffs(alpha_deg, Mach, dele_ach_deg, speedbrake)
 
         # Apply XLR99 Jet Damping Correction directly to dimensionless terms 
-        Cmq_prps += -0.05 * throttle_perc
-        Cnr_prps += -0.02 * throttle_perc
+        Cmq_prps += -0.05 * throttle_perc / 100
+        Cnr_prps += -0.02 * throttle_perc / 100
 
         # Dimensional Wind-Axis Forces
         drag_kgmps2 = CD_X15(CDwb, self.CDdele_pdeg, self.CDdelsb_pdeg, dele_ach_deg, delsb_deg) * qbar_kgpms2 * self.S_ref_m2
@@ -262,7 +265,7 @@ class X15(Vehicle):
 
         return Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2
     
-    def pitch_control(self, t_s, q_b_rps, cmod):
+    def pitch_control(self, t_s, q_b_rps, cmod, dele_trim_rad):
         dele_stick_deg = 0.0
         
         if cmod["elevator"]:
@@ -282,10 +285,10 @@ class X15(Vehicle):
         dele_sas_deg = cmod["Kq"] * q_b_rps if cmod["sas"] else 0.0
         
         # Elevator action is superposition of pilot input and SAS
-        return dele_sas_deg + dele_stick_deg
+        return (dele_sas_deg + dele_stick_deg) * D2R
 
     # Roll control via aileron
-    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod):
+    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod, dela_trim_rad):
         dela_stick_deg = 0.0
         
         if cmod["aileron"]:
@@ -305,10 +308,10 @@ class X15(Vehicle):
         dela_sas_deg = (cmod["Kp"] * p_b_rps + cmod["Kyar"] * r_b_rps) if cmod["sas"] else 0.0
         
         # Aileron deflection due to pilot input and SAS
-        return dela_sas_deg + dela_stick_deg
+        return (dela_sas_deg + dela_stick_deg) * D2R
 
     # Yaw control via rudder
-    def yaw_control(self, t_s, r_b_rps, cmod):
+    def yaw_control(self, t_s, r_b_rps, cmod, delr_trim_rad):
         delr_pedal_deg = 0.0
         
         if cmod["rudder"]:
@@ -327,35 +330,41 @@ class X15(Vehicle):
         # SAS feedback applied conditionally
         delr_sas_deg = cmod["Kr"] * r_b_rps if cmod["sas"] else 0.0
         
-        return delr_sas_deg + delr_pedal_deg
+        return (delr_sas_deg + delr_pedal_deg) * D2R
 
-    def get_trim_values(self, trim_list):
+    # Yaw control via rudder
+    def throttle_control(self, t_s, cmod, delt_trim_pct):
+        return 0
+
+    def get_control_trim_values(self, trim_list):
         if trim_list is None:
             return 0, 0, 0, 0
-        return trim_list[:4]
+        return trim_list[-4:]
+    
+    def set_gnc_inputs(self, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
+        pass
 
-    def get_sas_commands(self, t, x, cmod, u_trim):
+    def get_sas_commands(self, t, x, cmod, x_trim_ref):
         """
         Routes the Stability Augmentation System and superimposes commands over trim baseline.
-        u_trim is expected as [dela_trim, dele_trim, delr_trim, delt_trim]
         """
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
         # Extract trim baselines
-        dela_trim_deg, dele_trim_deg, delr_trim_deg, delt_trim_pct = self.get_trim_values(u_trim)
+        dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct = self.get_control_trim_values(x_trim_ref)
         
         # Calculate dynamic commands (Stick + Feedback)
-        dela_dynamic_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)
-        dele_dynamic_deg = self.pitch_control(t, q_b_rps, cmod)
-        delr_dynamic_deg = self.yaw_control(t, r_b_rps, cmod)
+        dela_dynamic_rad = self.roll_control(t, p_b_rps, r_b_rps, cmod, dela_trim_rad)
+        dele_dynamic_rad = self.pitch_control(t, q_b_rps, cmod, dele_trim_rad)
+        delr_dynamic_rad = self.yaw_control(t, r_b_rps, cmod, delr_trim_rad)
         
         # Superimpose dynamic commands onto trim baseline
-        dela_cmd_deg = dela_trim_deg + dela_dynamic_deg
-        dele_cmd_deg = dele_trim_deg + dele_dynamic_deg
-        delr_cmd_deg = delr_trim_deg + delr_dynamic_deg
+        dela_cmd_rad = dela_trim_rad + dela_dynamic_rad
+        dele_cmd_rad = dele_trim_rad + dele_dynamic_rad
+        delr_cmd_rad = delr_trim_rad + delr_dynamic_rad
         delt_cmd_pct = delt_trim_pct
         
-        return dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, delt_cmd_pct
+        return dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
     
     def actuator_kinematics(self, cmd_deg, ach_deg, tau_s, pos_lims, rate_lim_dps, dt=None):
         """
@@ -381,14 +390,14 @@ class X15(Vehicle):
             
         return rate_dps
     
-    def aileron_kinematics(self, dela_cmd_deg, dela_ach_deg):
-        return self.actuator_kinematics(dela_cmd_deg, dela_ach_deg, self.tau_a_s, self.lim_a_pos_deg, self.lim_a_rate_dps)
+    def aileron_kinematics(self, dela_cmd_rad, dela_ach_rad):
+        return self.actuator_kinematics(dela_cmd_rad*R2D, dela_ach_rad*R2D, self.tau_a_s, self.lim_a_pos_rad*R2D, self.lim_a_rate_rps*R2D)*D2R
     
-    def elevator_kinematics(self, dele_cmd_deg, dele_ach_deg):
-        return self.actuator_kinematics(dele_cmd_deg, dele_ach_deg, self.tau_e_s, self.lim_e_pos_deg, self.lim_e_rate_dps)
+    def elevator_kinematics(self, dele_cmd_rad, dele_ach_rad):
+        return self.actuator_kinematics(dele_cmd_rad*R2D, dele_ach_rad*R2D, self.tau_e_s, self.lim_e_pos_rad*R2D, self.lim_e_rate_rps*R2D)*D2R
     
-    def rudder_kinematics(self, delr_cmd_deg, delr_ach_deg):
-        return self.actuator_kinematics(delr_cmd_deg, delr_ach_deg, self.tau_r_s, self.lim_r_pos_deg, self.lim_r_rate_dps)
+    def rudder_kinematics(self, delr_cmd_rad, delr_ach_rad):
+        return self.actuator_kinematics(delr_cmd_rad*R2D, delr_ach_rad*R2D, self.tau_r_s, self.lim_r_pos_rad*R2D, self.lim_r_rate_rps*R2D)*D2R
     
     def throttle_kinematics(self, delt_cmd_pctg, delt_ach_pct):
         return 0.0

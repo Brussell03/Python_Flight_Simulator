@@ -1,9 +1,12 @@
+import math
+
 import numpy as np
 import pandas as pd
 import pyJanus
 from models.vehicle_base import Vehicle
 from src.utils.unit_conversion import UnitConverter
 from src.utils.interpolators import fastInterp1
+from src.utils.constants import D2R, R2D
 
 class DAVEVehicle(Vehicle):
     def get_var_def(self, system, *var_names):
@@ -18,16 +21,17 @@ class DAVEVehicle(Vehicle):
                     return var_def
             except:
                 continue
+        print(f"Variable {var_names} not found in {system}")
         return None
 
-    def get_si_val(self, var_def):
+    def get_si_val(self, var_def, log = False):
         if var_def is not None:
-            return UnitConverter.to_si(var_def.get_value(), str(var_def.units))
+            return UnitConverter.to_si(var_def.get_value(), str(var_def.units), log=log)
         return 0
 
-    def set_var_val(self, var_def, value):
+    def set_var_val(self, var_def, value, log = False):
         if var_def is not None:
-            var_def.set_value(UnitConverter.from_si(value, str(var_def.units)))
+            var_def.set_value(UnitConverter.from_si(value, str(var_def.units), log=log))
         
     def __init__(self, name, short_name, aero_dml_path="models/cannonball/cannonball_aero.dml", inertia_dml_path="models/cannonball/cannonball_inertia.dml",
                  prop_dml_path=None, control_dml_path=None, gnc_dml_path=None, time_history_path=None):
@@ -105,7 +109,7 @@ class DAVEVehicle(Vehicle):
         
         if self.prop_sys is not None:
             # Inputs
-            self.delt_ref = self.get_var_def(self.prop_sys, "PWR")
+            self.delt_in_ref = self.get_var_def(self.prop_sys, "PWR") # [0, 100]
             self.alt_ref = self.get_var_def(self.prop_sys, "ALT")
             self.mach_ref = self.get_var_def(self.prop_sys, "RMACH")
             
@@ -118,31 +122,88 @@ class DAVEVehicle(Vehicle):
             self.M_thrust_n_ref = self.get_var_def(self.prop_sys, "TEN")
         
         # ==========================================
-        # 4. Actuators
+        # 4. GNC System Initialization
+        # ==========================================
+        try:
+            self.gnc_sys = pyJanus.Janus(gnc_dml_path)
+        except Exception as e:
+            self.gnc_sys = None
+            if prop_dml_path is not None:
+                print(f"GNC system not found at: {gnc_dml_path}")
+                print(e)
+        
+        if self.gnc_sys is not None:
+            # Inputs
+            self.throttle_pilot_ref = self.get_var_def(self.gnc_sys, "throttle") # [0, 1]
+            self.pitch_stick_ref = self.get_var_def(self.gnc_sys, "longStk") # [-1, 1]
+            self.roll_stick_ref = self.get_var_def(self.gnc_sys, "latStk") # [-1, 1]
+            self.yaw_pedal_ref = self.get_var_def(self.gnc_sys, "pedal") # [-1, 1]
+            self.sas_toggle_ref = self.get_var_def(self.gnc_sys, "sasOn") # 0 or 1
+            self.ap_toggle_ref = self.get_var_def(self.gnc_sys, "apOn") # 0 or 1
+            self.circumnavigator_toggle_ref = self.get_var_def(self.gnc_sys, "circlePoleSW") # 0 or 1
+            
+            # Navigator inputs
+            self.lat_ref = self.get_var_def(self.gnc_sys, "ownshipN_deg")
+            self.long_ref = self.get_var_def(self.gnc_sys, "ownshipE_deg")
+            
+            # Autopilot command inputs
+            self.equiv_airspeed_cmd_ref = self.get_var_def(self.gnc_sys, "keasCmd")
+            self.alt_cmd_ref = self.get_var_def(self.gnc_sys, "altCmd")
+            self.trimmed_alpha_ref = self.get_var_def(self.gnc_sys, "trimmedAlpha")
+            self.trimmed_theta_ref = self.get_var_def(self.gnc_sys, "trimmedTheta")
+            self.trimmed_keas_ref = self.get_var_def(self.gnc_sys, "trimmedKEAS")
+            
+            # Sensor feedbacks for SAS and AP
+            self.alt_ref = self.get_var_def(self.gnc_sys, "altMsl")
+            self.equiv_airspeed_ref = self.get_var_def(self.gnc_sys, "Vequiv")
+            self.alpha_gnc_def = self.get_var_def(self.gnc_sys, "alpha")
+            self.beta_gnc_def = self.get_var_def(self.gnc_sys, "beta")
+            self.phi_ref = self.get_var_def(self.gnc_sys, "phi")
+            self.theta_ref = self.get_var_def(self.gnc_sys, "theta")
+            self.psi_ref = self.get_var_def(self.gnc_sys, "psi")
+            self.p_b_gnc_ref = self.get_var_def(self.gnc_sys, "pb")
+            self.q_b_gnc_ref = self.get_var_def(self.gnc_sys, "qb")
+            self.r_b_gnc_ref = self.get_var_def(self.gnc_sys, "rb")
+            
+            # Trimmed values of longitudinal controls
+            self.delt_trim_ref = self.get_var_def(self.gnc_sys, "throttleTrim") # [0, 1]
+            self.pitch_stick_trim_ref = self.get_var_def(self.gnc_sys, "longStkTrim") # [0, 1]
+            
+            # Outputs
+            self.dele_ref = self.get_var_def(self.gnc_sys, "el") # Deflection angle
+            self.dela_ref = self.get_var_def(self.gnc_sys, "ail") # Deflection angle
+            self.delr_ref = self.get_var_def(self.gnc_sys, "rdr") # Deflection angle
+            self.delt_out_ref = self.get_var_def(self.gnc_sys, "PWR") # [0, 100]
+        
+        # ==========================================
+        # 5. Actuators
         # ==========================================
         # Actuation Time Constants (First-order lag)
         self.tau_a_s = 0.1
         self.tau_e_s = 0.1
         self.tau_r_s = 0.1
+        self.tau_t_s = 1
         
-        # Actuation Position Limits [min_deg, max_deg]
-        self.lim_a_pos_deg = [-15.0, 15.0]  # Differential tail roll limit
-        self.lim_e_pos_deg = [-35.0, 15.0]  # Pitch limit (usually more trailing-edge up authority)
-        self.lim_r_pos_deg = [-7.5, 7.5]    # Rudder limit
+        # Actuation Position Limits [min_rad, max_rad]
+        self.lim_a_pos_rad = np.array([-21.5, 21.5]) * D2R
+        self.lim_e_pos_rad = np.array([-25.0, 25.0]) * D2R
+        self.lim_r_pos_rad = np.array([-30.0, 30.0]) * D2R
+        self.lim_t_pos_pct = [0.0, 100.0]
         
-        # Actuation Rate Limits [deg/s]
-        self.lim_a_rate_dps = 50.0
-        self.lim_e_rate_dps = 50.0
-        self.lim_r_rate_dps = 50.0
+        # Actuation Rate Limits [rad/s]
+        self.lim_a_rate_rps = 50.0 * D2R
+        self.lim_e_rate_rps = 50.0 * D2R
+        self.lim_r_rate_rps = 50.0 * D2R
+        self.lim_t_rate_pctps = 100.0
         
-        # --- Time History Data ---
-        self.time_history_s = None
-        self.aileron_time_history_deg = None
-        self.elevator_time_history_deg = None
-        self.rudder_time_history_deg = None
+        # # --- Time History Data ---
+        # self.time_history_s = None
+        # self.aileron_time_history_deg = None
+        # self.elevator_time_history_deg = None
+        # self.rudder_time_history_deg = None
         
-        if time_history_path is not None:
-            self._load_time_history(time_history_path)
+        # if time_history_path is not None:
+        #     self._load_time_history(time_history_path)
 
     # ==========================================
     # Base Class Properties
@@ -191,8 +252,8 @@ class DAVEVehicle(Vehicle):
         return 0.0
 
     def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
-                               p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                               delr_ach_deg, delsb_deg, delt_ach_pct, C_w2b, speedbrake, h_m):
+                               p_b_rps, q_b_rps, r_b_rps, dele_ach_rad, dela_ach_rad, 
+                               delr_ach_rad, delsb_deg, delt_ach_pct, C_w2b, speedbrake, h_m):
         
         # 1. Push all state and control inputs to the DAVE-ML aero system
         # Aero inputs
@@ -202,13 +263,13 @@ class DAVEVehicle(Vehicle):
         self.set_var_val(self.p_b_ref, p_b_rps)
         self.set_var_val(self.q_b_ref, q_b_rps)
         self.set_var_val(self.r_b_ref, r_b_rps)
-        self.set_var_val(self.dele_def, dele_ach_deg)
-        self.set_var_val(self.dela_def, dela_ach_deg)
-        self.set_var_val(self.delr_def, delr_ach_deg)
+        self.set_var_val(self.dele_def, dele_ach_rad)
+        self.set_var_val(self.dela_def, dela_ach_rad)
+        self.set_var_val(self.delr_def, delr_ach_rad)
         
         # Prop inputs
         if self.prop_sys is not None:
-            self.set_var_val(self.delt_ref, delt_ach_pct)
+            self.set_var_val(self.delt_in_ref, delt_ach_pct)
             self.set_var_val(self.alt_ref, h_m)
             self.set_var_val(self.mach_ref, Mach)
         
@@ -275,33 +336,117 @@ class DAVEVehicle(Vehicle):
     # ==========================================
     # Pass-through Kinematics
     # ==========================================
-    def get_trim_values(self, trim_list):
+    def get_control_trim_values(self, trim_list):
         if trim_list is None:
             return 0, 0, 0, 0
-        return trim_list[:4]
+        return trim_list[-4:]
     
-    def get_sas_commands(self, t, x, cmod, u_trim):
+    def set_gnc_inputs(self, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
+        if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
+            return
+        
+        # Pilot inputs
+        self.set_var_val(self.throttle_pilot_ref, 0) # [0, 1]
+        self.set_var_val(self.pitch_stick_ref, 0) # [-1, 1]
+        self.set_var_val(self.roll_stick_ref, 0) # [-1, 1]
+        self.set_var_val(self.yaw_pedal_ref, 0) # [-1, 1]
+        
+        # Navigator inputs
+        self.set_var_val(self.lat_ref, lat_rad)
+        self.set_var_val(self.long_ref, long_rad)
+        
+        if cmod.get("sas", False):
+            self.set_var_val(self.sas_toggle_ref, 1) # Engaged
+        else:
+            self.set_var_val(self.sas_toggle_ref, 0)
+        
+        # Autopilot command inputs
+        if cmod.get("ap", False):
+            self.set_var_val(self.ap_toggle_ref, 1) # Engaged
+            self.set_var_val(self.equiv_airspeed_cmd_ref, 0)
+            self.set_var_val(self.alt_cmd_ref, 0)
+        else:
+            self.set_var_val(self.ap_toggle_ref, 0)
+        
+        rho_0 = 1.225 # Standard sea-level density [kg/m^3]
+        
+        # Sensor feedbacks for SAS and AP
+        if cmod.get("sas", False) or cmod.get("ap", False):
+            self.set_var_val(self.alt_ref, h_m)
+            
+            # Equivalent Airspeed Calculation
+            equiv_airspeed_mps = true_airspeed_mps * math.sqrt(rho_kgpm3 / rho_0)
+            self.set_var_val(self.equiv_airspeed_ref, equiv_airspeed_mps)
+            
+            self.set_var_val(self.alpha_gnc_def, alpha_rad)
+            self.set_var_val(self.beta_gnc_def, beta_rad)
+            self.set_var_val(self.phi_ref, phi_rad)
+            self.set_var_val(self.theta_ref, theta_rad)
+            self.set_var_val(self.psi_ref, psi_rad)
+            self.set_var_val(self.p_b_gnc_ref, p_b_rps)
+            self.set_var_val(self.q_b_gnc_ref, q_b_rps)
+            self.set_var_val(self.r_b_gnc_ref, r_b_rps)
+        
+        if cmod.get("circumnavigator"):
+            self.set_var_val(self.circumnavigator_toggle_ref, 1) # circle N pole
+        else:
+            self.set_var_val(self.circumnavigator_toggle_ref, 0) # circle equator/Int'l date line intersection
+        
+        # --- Trimmed Values of Longitudinal Controls ---
+        if x_trim_ref is not None:
+            dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct = self.get_control_trim_values(x_trim_ref)
+            
+            # Scale throttle to [0, 1] from 0 - 100%
+            throttle_trim_norm = delt_trim_pct / 100.0
+            self.set_var_val(self.delt_trim_ref, throttle_trim_norm)
+            
+            # Normalize pitch stick trim to perfectly invert the XML's elevator gearing
+            # XML formula: el = -25.0 * totLongStk
+            pitch_stick_trim_norm = max(min(dele_trim_rad*R2D / -25.0, 1.0), -1.0)
+            self.set_var_val(self.pitch_stick_trim_ref, pitch_stick_trim_norm)
+            
+            # --- OVERWRITE HARDCODED LQR SETPOINTS WITH TRIM STATE ---
+            alpha_trim_rad = math.atan2(x_trim_ref[2], x_trim_ref[0])
+            theta_trim_rad = x_trim_ref[7]
+            V_T_trim_mps = math.sqrt(x_trim_ref[0]**2 + x_trim_ref[1]**2 + x_trim_ref[2]**2)
+            rho_trim_kgpm3 = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], x_trim_ref[11])
+            keas_trim_mps = V_T_trim_mps * math.sqrt(rho_trim_kgpm3 / rho_0)
+            self.set_var_val(self.trimmed_alpha_ref, alpha_trim_rad)
+            self.set_var_val(self.trimmed_theta_ref, theta_trim_rad)
+            self.set_var_val(self.trimmed_keas_ref, keas_trim_mps)
+        else:
+            # Fallback if no trim vector is provided
+            self.set_var_val(self.delt_trim_ref, 0.0)
+            self.set_var_val(self.pitch_stick_trim_ref, 0.0)
+    
+    def get_sas_commands(self, t, x, cmod, x_trim_ref):
         """
         Routes the Stability Augmentation System and superimposes commands over trim baseline.
-        u_trim is expected as [dela_trim, dele_trim, delr_trim, delt_trim]
         """
+        # Extract trim baselines
+        dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct = self.get_control_trim_values(x_trim_ref)
+        
+        if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
+            return dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct
+        
+        # dela_dynamic_rad = self.get_si_val(self.dela_ref)
+        # dele_cmd_rad = self.get_si_val(self.dele_ref)
+        # delr_dynamic_rad = self.get_si_val(self.delr_ref)
+        # delt_cmd_pct = self.get_si_val(self.delt_out_ref)
+        
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
-        # Extract trim baselines
-        dela_trim_deg, dele_trim_deg, delr_trim_deg, delt_trim_pct = self.get_trim_values(u_trim)
+        dela_dynamic_rad = self.roll_control(t, p_b_rps, r_b_rps, cmod, dela_trim_rad)
+        dele_dynamic_rad = self.pitch_control(t, q_b_rps, cmod, dele_trim_rad)
+        delr_dynamic_rad = self.yaw_control(t, r_b_rps, cmod, delr_trim_rad)
+        delt_dynamic_pct = self.throttle_control(t, cmod, delt_trim_pct)
         
-        # Calculate dynamic commands (Stick + Feedback)
-        dela_dynamic_deg = self.roll_control(t, p_b_rps, r_b_rps, cmod)
-        dele_dynamic_deg = self.pitch_control(t, q_b_rps, cmod)
-        delr_dynamic_deg = self.yaw_control(t, r_b_rps, cmod)
+        dela_cmd_rad = dela_trim_rad + dela_dynamic_rad
+        dele_cmd_rad = dele_trim_rad + dele_dynamic_rad
+        delr_cmd_rad = delr_trim_rad + delr_dynamic_rad
+        delt_cmd_pct = delt_trim_pct + delt_dynamic_pct
         
-        # Superimpose dynamic commands onto trim baseline
-        dela_cmd_deg = dela_trim_deg + dela_dynamic_deg
-        dele_cmd_deg = dele_trim_deg + dele_dynamic_deg
-        delr_cmd_deg = delr_trim_deg + delr_dynamic_deg
-        delt_cmd_pct = delt_trim_pct
-        
-        return dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, delt_cmd_pct
+        return dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
     
     def actuator_kinematics(self, cmd_deg, ach_deg, tau_s, pos_lims, rate_lim_dps, dt=None):
         """
@@ -327,81 +472,45 @@ class DAVEVehicle(Vehicle):
             
         return rate_dps
     
-    def aileron_kinematics(self, dela_cmd_deg, dela_ach_deg):
-        return self.actuator_kinematics(dela_cmd_deg, dela_ach_deg, self.tau_a_s, self.lim_a_pos_deg, self.lim_a_rate_dps)
+    def aileron_kinematics(self, dela_cmd_rad, dela_ach_rad):
+        return self.actuator_kinematics(dela_cmd_rad*R2D, dela_ach_rad*R2D, self.tau_a_s, self.lim_a_pos_rad*R2D, self.lim_a_rate_rps*R2D)*D2R
     
-    def elevator_kinematics(self, dele_cmd_deg, dele_ach_deg):
-        return self.actuator_kinematics(dele_cmd_deg, dele_ach_deg, self.tau_e_s, self.lim_e_pos_deg, self.lim_e_rate_dps)
+    def elevator_kinematics(self, dele_cmd_rad, dele_ach_rad):
+        return self.actuator_kinematics(dele_cmd_rad*R2D, dele_ach_rad*R2D, self.tau_e_s, self.lim_e_pos_rad*R2D, self.lim_e_rate_rps*R2D)*D2R
     
-    def rudder_kinematics(self, delr_cmd_deg, delr_ach_deg):
-        return self.actuator_kinematics(delr_cmd_deg, delr_ach_deg, self.tau_r_s, self.lim_r_pos_deg, self.lim_r_rate_dps)
+    def rudder_kinematics(self, delr_cmd_rad, delr_ach_rad):
+        return self.actuator_kinematics(delr_cmd_rad*R2D, delr_ach_rad*R2D, self.tau_r_s, self.lim_r_pos_rad*R2D, self.lim_r_rate_rps*R2D)*D2R
     
     def throttle_kinematics(self, delt_cmd_pct, delt_ach_pct):
-        return 0.0
+        return self.actuator_kinematics(delt_cmd_pct, delt_ach_pct, self.tau_t_s, self.lim_t_pos_pct, self.lim_t_rate_pctps)
     
-    def pitch_control(self, t_s, q_b_rps, cmod):
-        dele_stick_deg = 0.0
+    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod, dela_trim_rad):
+        if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
+            return 0
         
-        if cmod.get("elevator", False):
-            # Determine pilot input type
-            input_type = cmod.get("type", "doublet")
-            
-            if input_type == "doublet":
-                # Elevator motion due to pilot stick input
-                if cmod["t1_s"] <= t_s <= cmod["t3_s"]:
-                    dele_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
-            
-            elif input_type == "time_history":
-                if self.time_history_s is not None and self.elevator_time_history_deg is not None:
-                    dele_stick_deg = fastInterp1(self.time_history_s, self.elevator_time_history_deg, t_s)
+        dela_dynamic_rad = self.get_si_val(self.dela_ref)
+        return dela_dynamic_rad
+    
+    def pitch_control(self, t_s, q_b_rps, cmod, dele_trim_rad):
+        if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
+            return 0
         
-        # SAS feedback applied conditionally
-        dele_sas_deg = cmod.get("Kq", 0) * q_b_rps if cmod.get("sas", False) else 0.0
-        
-        # Elevator action is superposition of pilot input and SAS
-        return dele_sas_deg + dele_stick_deg
-
-    # Roll control via aileron
-    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod):
-        dela_stick_deg = 0.0
-        
-        if cmod.get("aileron", False):
-            # Determine pilot input type
-            input_type = cmod.get("type", "doublet")
-            
-            if input_type == "doublet":
-                # Aileron motion due to pilot stick input
-                if cmod["t1_s"] <= t_s <= cmod["t3_s"]:
-                    dela_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
-            
-            elif input_type == "time_history":
-                if self.time_history_s is not None and self.aileron_time_history_deg is not None:
-                    dela_stick_deg = fastInterp1(self.time_history_s, self.aileron_time_history_deg, t_s)
-        
-        # SAS feedback applied conditionally
-        dela_sas_deg = (cmod.get("Kp", 0) * p_b_rps + cmod.get("Kyar", 0) * r_b_rps) if cmod.get("sas", False) else 0.0
-        
-        # Aileron deflection due to pilot input and SAS
-        return dela_sas_deg + dela_stick_deg
+        dele_cmd_rad = self.get_si_val(self.dele_ref, log=False)
+        dele_dynamic_rad = dele_cmd_rad - dele_trim_rad
+        return dele_dynamic_rad
 
     # Yaw control via rudder
-    def yaw_control(self, t_s, r_b_rps, cmod):
-        delr_pedal_deg = 0.0
+    def yaw_control(self, t_s, r_b_rps, cmod, delr_trim_rad):
+        if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
+            return 0
         
-        if cmod.get("rudder", False):
-            # Determine pilot input type
-            input_type = cmod.get("type", "doublet")
-            
-            if input_type == "doublet":
-                # Rudder motion due to pilot pedal input
-                if cmod["t1_s"] <= t_s <= cmod["t3_s"]:
-                    delr_pedal_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
-            
-            elif input_type == "time_history":
-                if self.time_history_s is not None and self.rudder_time_history_deg is not None:
-                    delr_pedal_deg = fastInterp1(self.time_history_s, self.rudder_time_history_deg, t_s)
+        delr_dynamic_rad = self.get_si_val(self.delr_ref)
+        return delr_dynamic_rad
+    
+    def throttle_control(self, t_s, cmod, delt_trim_pct):
+        if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
+            return 0
         
-        # SAS feedback applied conditionally
-        delr_sas_deg = cmod.get("Kr", 0) * r_b_rps if cmod.get("sas", False) else 0.0
-        
-        return delr_sas_deg + delr_pedal_deg
+        delt_cmd_pct = self.get_si_val(self.delt_out_ref)
+        delt_dynamic_pct = delt_cmd_pct - delt_trim_pct
+        return delt_dynamic_pct

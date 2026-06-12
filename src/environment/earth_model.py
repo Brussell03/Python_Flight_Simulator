@@ -26,26 +26,33 @@ class EarthModel:
         self.mu = mu                               # Gravitational parameter
         self.j2 = j2                               # J2 Perturbation
         self.g0 = g0                               # Gravity at MSL
-        self.gravity_type=gravity_type             # Gravity implementation
+        self.gravity_type=int32(gravity_type)      # Gravity implementation
         
         # Derived parameters
         self.e_sq = (self.a**2 - self.b**2) / self.a**2 if self.a != 0 else 0.0
         self.e = math.sqrt(self.e_sq)
 
     def ecef_to_geodetic(self, x: float, y: float, z: float):
-        """Bowring method for ECEF to Geodetic. Handles spherical (e_sq=0) automatically."""
+        """Bowring method for ECEF to Geodetic. Handles poles and spherical models safely."""
+        p = math.sqrt(x**2 + y**2)
+        
         if self.e_sq == 0.0:
-            p = math.sqrt(x**2 + y**2)
             r = math.sqrt(p**2 + z**2)
             lat = math.atan2(z, p)
             lon = math.atan2(y, x)
             return lat, lon, r - self.a
 
+        lon = math.atan2(y, x)
+        
+        # Intercept polar singularity where p -> 0
+        if p < 1e-6:
+            lat = math.pi / 2.0 if z > 0 else -math.pi / 2.0
+            alt = abs(z) - self.b
+            return lat, lon, alt
+
         ep2 = (self.a**2 - self.b**2) / self.b**2
-        p = math.sqrt(x**2 + y**2)
         th = math.atan2(self.a * z, self.b * p)
         
-        lon = math.atan2(y, x)
         lat = math.atan2(z + ep2 * self.b * math.sin(th)**3, p - self.e_sq * self.a * math.cos(th)**3)
         
         N = self.a / math.sqrt(1.0 - self.e_sq * math.sin(lat)**2)
@@ -53,10 +60,10 @@ class EarthModel:
         
         return lat, lon, alt
 
-    def get_gravity_ecef(self, x: float, y: float, z: float) -> np.ndarray:
+    def get_gravity_ecef(self, x: float, y: float, z: float):
         """Effective gravity in ECEF (Mass attraction + Centripetal)."""
         r_sq = x**2 + y**2 + z**2
-        if r_sq == 0: return np.zeros(3)
+        if r_sq == 0: return 0.0, 0.0, 0.0
         r = math.sqrt(r_sq)
         
         # Centripetal term (applies to all rotating models)
@@ -85,25 +92,15 @@ class EarthModel:
             gy_mass = -y * factor * (1.0 + j2_term * (1.0 - z_term))
             gz_mass = -z * factor * (1.0 + j2_term * (3.0 - z_term))
             
-        return np.array([gx_mass + gx_cent, gy_mass + gy_cent, gz_mass + gz_cent], dtype=np.float64)
+        return gx_mass + gx_cent, gy_mass + gy_cent, gz_mass + gz_cent
 
-    def get_earth_rate_ecef(self) -> np.ndarray:
-        return np.array([0.0, 0.0, self.omega_rps], dtype=np.float64)
+    def get_earth_rate_ecef(self):
+        return 0.0, 0.0, self.omega_rps
     
-    def wgs84_to_cartesian(self, lat_rad: float, long_rad: float, h_m: float):
+    def geodetic_to_ecef(self, lat_rad: float, long_rad: float, h_m: float):
         sin_lat, cos_lat = math.sin(lat_rad), math.cos(lat_rad)
         sin_lon, cos_lon = math.sin(long_rad), math.cos(long_rad)
         
-        N = self.a / math.sqrt(1.0 - self.e_sq * sin_lat**2)
-        x_e = (N + h_m) * cos_lat * cos_lon
-        y_e = (N + h_m) * cos_lat * sin_lon
-        z_e = (N * (1.0 - self.e_sq) + h_m) * sin_lat
-        
-        return x_e, y_e, z_e
-    
-    def cartesian_to_wgs84(self, lat_rad: float, long_rad: float, h_m: float):
-        sin_lat, cos_lat = math.sin(lat_rad), math.cos(lat_rad)
-        sin_lon, cos_lon = math.sin(long_rad), math.cos(long_rad)
         N = self.a / math.sqrt(1.0 - self.e_sq * sin_lat**2)
         x_e_m = (N + h_m) * cos_lat * cos_lon
         y_e_m = (N + h_m) * cos_lat * sin_lon

@@ -50,9 +50,9 @@ class SimulatorPlotter:
             'lat': _get_val(data, 'lat_rad') * R2D,
             'lon': _get_val(data, 'long_rad') * R2D,
             'alt': _get_val(data, 'h_m'),
-            'dela_ach': _get_val(data, 'dela_ach_deg'),
-            'dele_ach': _get_val(data, 'dele_ach_deg'),
-            'delr_ach': _get_val(data, 'delr_ach_deg'),
+            'dela_ach': _get_val(data, 'dela_ach_rad') * R2D,
+            'dele_ach': _get_val(data, 'dele_ach_rad') * R2D,
+            'delr_ach': _get_val(data, 'delr_ach_rad') * R2D,
             'delt_ach': _get_val(data, 'delt_ach_pct'),
             'mach': _get_val(data, 'mach'),
             'alpha': _get_val(data, 'alpha_rad') * R2D,
@@ -64,9 +64,9 @@ class SimulatorPlotter:
             'u_n': _get_val(data, 'u_n_mps'),
             'v_n': _get_val(data, 'v_n_mps'),
             'w_n': _get_val(data, 'w_n_mps'),
-            'dela_cmd': _get_val(data, 'dela_cmd_deg'),
-            'dele_cmd': _get_val(data, 'dele_cmd_deg'),
-            'delr_cmd': _get_val(data, 'delr_cmd_deg'),
+            'dela_cmd': _get_val(data, 'dela_cmd_rad') * R2D,
+            'dele_cmd': _get_val(data, 'dele_cmd_rad') * R2D,
+            'delr_cmd': _get_val(data, 'delr_cmd_rad') * R2D,
             'delt_cmd': _get_val(data, 'delt_cmd_pct'),
         }
 
@@ -223,7 +223,7 @@ class SimulatorPlotter:
         if show: plt.show(block=False)
 
     def plot_attitude(self, filename="attitude", show=False, error=False):
-        fig, axes = self._setup_figure("Euler Angles", 3, 1, (10, 6), error)
+        fig, axes = self._setup_figure("Euler Angles", 3, 1, (12, 8), error)
         keys = ['phi', 'theta', 'psi']
         labels = ['Roll Angle [deg]', 'Pitch Angle [deg]', 'Yaw Angle [deg]']
         
@@ -238,7 +238,7 @@ class SimulatorPlotter:
         if show: plt.show(block=False)
 
     def plot_controls(self, filename="controls", show=False, error=False):
-        fig, axes = self._setup_figure("Actuation & Controls", 2, 2, (10, 6), error)
+        fig, axes = self._setup_figure("Actuation & Controls", 2, 2, (12, 8), error)
         
         ach_keys = ['dela_ach', 'dele_ach', 'delr_ach', 'delt_ach']
         cmd_keys = ['dela_cmd', 'dele_cmd', 'delr_cmd', 'delt_cmd']
@@ -273,7 +273,7 @@ class SimulatorPlotter:
         if show: plt.show(block=False)
         
     def plot_aerodynamics(self, filename="air_data", show=False, error=False):
-        fig, axes = self._setup_figure("Aerodynamic States", 2, 2, (10, 6), error)
+        fig, axes = self._setup_figure("Aerodynamic States", 2, 2, (12, 8), error)
         keys = ['alpha', 'beta', 'mach', 'tas']
         labels = ['Angle of Attack [deg]', 'Angle of Sideslip [deg]', 'Mach Number', 'True Airspeed [m/s]']
         
@@ -288,7 +288,7 @@ class SimulatorPlotter:
         if show: plt.show(block=False)
 
     def plot_geodetic(self, filename="geodetic", show=False, error=False):
-        fig, axes = self._setup_figure("Geodetic Position", 2, 2, (10, 6), error)
+        fig, axes = self._setup_figure("Geodetic Position", 2, 2, (10, 8), error)
         keys = ['lat', 'lon', 'alt']
         labels = ['Latitude [deg]', 'Longitude [deg]', 'Altitude [m]']
         
@@ -311,7 +311,7 @@ class SimulatorPlotter:
         if show: plt.show(block=False)
         
     def plot_ned_velocity(self, filename="ned_velocity", show=False, error=False):
-        fig, axes = self._setup_figure("Inertial Velocity (NED)", 3, 1, (10, 6), error)
+        fig, axes = self._setup_figure("Inertial Velocity (NED)", 3, 1, (12, 8), error)
         keys = ['u_n', 'v_n', 'w_n']
         labels = ['North Vel [m/s]', 'East Vel [m/s]', 'Down Vel [m/s]']
         

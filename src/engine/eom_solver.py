@@ -12,7 +12,7 @@ class eom_solver:
         self.wind_model = wind_model
         self.atmo_model = atmo_model
     
-    def solve_eom(self, t, x, dx, auxillary_data, u_trim, vehicle, cmod):
+    def solve_eom(self, t, x, dx, auxillary_data, x_trim_ref, vehicle, cmod):
 
         # State Extraction
         u_b_mps, v_b_mps, w_b_mps = x[0], x[1], x[2]
@@ -20,7 +20,7 @@ class eom_solver:
         q_b2e = x[6:10]
         x_e_m, y_e_m, z_e_m = x[10], x[11], x[12]
         m_fuel_kg = x[13]
-        dela_ach_deg, dele_ach_deg, delr_ach_deg, delt_ach_pct = x[14], x[15], x[16], x[17]
+        dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct = x[14], x[15], x[16], x[17]
         
         norm = math.sqrt(q_b2e[0]**2 + q_b2e[1]**2 + q_b2e[2]**2 + q_b2e[3]**2)
         q_b2e = q_b2e/norm
@@ -28,32 +28,6 @@ class eom_solver:
         # Vehicle Mass State Interface
         m_total_kg = vehicle.m_dry_kg + m_fuel_kg
         Jxx_b_kgm2, Jyy_b_kgm2, Jzz_b_kgm2, Jxy_b_kgm2, Jxz_b_kgm2, Jyz_b_kgm2 = vehicle.get_mass_properties(m_total_kg)
-        
-        speedbrake = cmod.get("speedbrake", False)
-
-        # Control Routing
-        delsb_deg = open_loop_speed_brake()
-        
-        # Engine Interface
-        m_fuel_dot_kgps = vehicle.get_engine_burn_rate(delt_ach_pct)
-        
-        # Trim & Linearization Overrides
-        dela_ach_deg_old, dele_ach_deg_old, delr_ach_deg_old, delt_ach_pct_old = dela_ach_deg, dele_ach_deg, delr_ach_deg, delt_ach_pct
-        if cmod.get("trim_flag"):
-            # Surfaces fixed
-            dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = dela_ach_deg, dele_ach_deg, delr_ach_deg
-            delt_cmd_pct = delt_ach_pct
-        elif cmod.get("linearization_flag"):
-            # Commanded values
-            dela_cmd_deg, dele_cmd_deg, delr_cmd_deg = cmod['dela_cmd_deg'], cmod['dele_cmd_deg'], cmod['delr_cmd_deg']
-            delt_cmd_pct = cmod['delt_cmd_pct']
-        else:
-            # Require the vehicle or SAS object to return control deflections
-            dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, delt_cmd_pct = vehicle.get_sas_commands(t, x, cmod, u_trim)
-        
-        if cmod.get("type") == "time_history":
-            dela_ach_deg, dele_ach_deg, delr_ach_deg = dela_cmd_deg, dele_cmd_deg, delr_cmd_deg
-            x[13], x[14], x[15] = dela_ach_deg, dele_ach_deg, delr_ach_deg
         
         # Resolve Geodetics for Atmosphere and Aerodynamics
         lat_rad, long_rad, h_m = self.earth_model.ecef_to_geodetic(x_e_m, y_e_m, z_e_m)
@@ -95,6 +69,38 @@ class eom_solver:
         alpha_rad = math.atan2(w_air_b_mps, u_air_b_mps)
         beta_rad = math.asin(v_air_b_mps / true_airspeed_mps) if true_airspeed_mps > 0 else 0.0
         C_w2b = wind_to_body_dcm(alpha_rad, beta_rad)
+
+        phi_rad   = np.arctan2(C_b2n[2, 1], C_b2n[2, 2])
+        theta_rad = np.arcsin(np.clip(-C_b2n[2, 0], -1.0, 1.0))
+        psi_rad   = np.arctan2(C_b2n[1, 0], C_b2n[0, 0])
+        
+        vehicle.set_gnc_inputs(cmod, self.atmo_model, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref)
+        
+        speedbrake = cmod.get("speedbrake", False)
+
+        # Control Routing
+        delsb_deg = open_loop_speed_brake()
+        
+        # Engine Interface
+        m_fuel_dot_kgps = vehicle.get_engine_burn_rate(delt_ach_pct)
+        
+        # Trim & Linearization Overrides
+        dela_ach_rad_old, dele_ach_rad_old, delr_ach_rad_old, delt_ach_pct_old = dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct
+        if cmod.get("trim_flag"):
+            # Surfaces fixed
+            dela_cmd_rad, dele_cmd_rad, delr_cmd_rad = dela_ach_rad, dele_ach_rad, delr_ach_rad
+            delt_cmd_pct = delt_ach_pct
+        elif cmod.get("linearization_flag"):
+            # Commanded values
+            dela_cmd_rad, dele_cmd_rad, delr_cmd_rad = cmod['dela_cmd_rad'], cmod['dele_cmd_rad'], cmod['delr_cmd_rad']
+            delt_cmd_pct = cmod['delt_cmd_pct']
+        else:
+            # Require the vehicle or SAS object to return control deflections
+            dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct = vehicle.get_sas_commands(t, x, cmod, x_trim_ref)
+        
+        if cmod.get("type") == "time_history":
+            dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct = dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
+            x[14], x[15], x[16], x[17] = dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct
         
         # Air-Relative Rotational States (Wind Shear Gradient Tensor)
         # Gradient of wind in NED (D = -h)
@@ -124,7 +130,7 @@ class eom_solver:
         
         # Vehicle returns mapped body forces
         Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2 = vehicle.get_forces_and_moments(alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps,
-                                                                                                                    p_air_b_rps, q_air_b_rps, r_air_b_rps, dele_ach_deg, dela_ach_deg, delr_ach_deg, delsb_deg, delt_ach_pct, C_w2b, speedbrake, h_m)
+                                                                                                                    p_air_b_rps, q_air_b_rps, r_air_b_rps, dele_ach_rad, dela_ach_rad, delr_ach_rad, delsb_deg, delt_ach_pct, C_w2b, speedbrake, h_m)
 
         # omega_ib_b_rps is the inertial body rate. The Coriolis acceleration for 
         # Earth-relative velocity tracked in the body frame requires (omega_ib + omega_ie) x V
@@ -201,9 +207,9 @@ class eom_solver:
         dx[13] = -m_fuel_dot_kgps
 
         # Actuation
-        dx[14] = vehicle.aileron_kinematics(dela_cmd_deg, dela_ach_deg_old)
-        dx[15] = vehicle.elevator_kinematics(dele_cmd_deg, dele_ach_deg_old)
-        dx[16] = vehicle.rudder_kinematics(delr_cmd_deg, delr_ach_deg_old)
+        dx[14] = vehicle.aileron_kinematics(dela_cmd_rad, dela_ach_rad_old)
+        dx[15] = vehicle.elevator_kinematics(dele_cmd_rad, dele_ach_rad_old)
+        dx[16] = vehicle.rudder_kinematics(delr_cmd_rad, delr_ach_rad_old)
         dx[17] = vehicle.throttle_kinematics(delt_cmd_pct, delt_ach_pct_old)
 
         # Nav-Relative Body Rates
@@ -221,7 +227,7 @@ class eom_solver:
         omega_nb_b_rps = omega_ib_b_rps - omega_in_b_rps
 
         # Aux Data Output
-        auxillary_data[0:4] = [dela_cmd_deg, dele_cmd_deg, delr_cmd_deg, delt_cmd_pct]
+        auxillary_data[0:4] = [dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct]
         auxillary_data[4:7] = omega_nb_b_rps
         auxillary_data[7:10] = [Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2]
         auxillary_data[10:13] = [l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2]
@@ -337,10 +343,10 @@ class eom_solver:
             Fx_b_kgmps2=auxillary_data[7, :], Fy_b_kgmps2=auxillary_data[8, :], Fz_b_kgmps2=auxillary_data[9, :],
             l_b_kgm2ps2=auxillary_data[10, :], m_b_kgm2ps2=auxillary_data[11, :], n_b_kgm2ps2=auxillary_data[12, :],
             
-            dela_ach_deg=x[14, :], dele_ach_deg=x[15, :],
-            delr_ach_deg=x[16, :], delt_ach_pct=x[17, :],
-            dela_cmd_deg=auxillary_data[0, :], dele_cmd_deg=auxillary_data[1, :],
-            delr_cmd_deg=auxillary_data[2, :], delt_cmd_pct=auxillary_data[3, :],
+            dela_ach_rad=x[14, :], dele_ach_rad=x[15, :],
+            delr_ach_rad=x[16, :], delt_ach_pct=x[17, :],
+            dela_cmd_rad=auxillary_data[0, :], dele_cmd_rad=auxillary_data[1, :],
+            delr_cmd_rad=auxillary_data[2, :], delt_cmd_pct=auxillary_data[3, :],
             
             W_N_mps=W_n_mps[0, :], W_E_mps=W_n_mps[1, :], W_D_mps=W_n_mps[2, :]
         )

@@ -33,8 +33,8 @@ class Vehicle(ABC):
     
     @abstractmethod
     def get_forces_and_moments(self, alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps, 
-                               p_b_rps, q_b_rps, r_b_rps, dele_ach_deg, dela_ach_deg, 
-                               delr_ach_deg, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
+                               p_b_rps, q_b_rps, r_b_rps, dele_ach_rad, dela_ach_rad, 
+                               delr_ach_rad, delsb_deg, throttle_perc, C_w2b, speedbrake, h_m):
         pass
     
     @abstractmethod
@@ -42,19 +42,23 @@ class Vehicle(ABC):
         pass
     
     @abstractmethod
-    def get_sas_commands(self, t, x, cmod, u_trim):
+    def set_gnc_inputs(self, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim):
         pass
     
     @abstractmethod
-    def aileron_kinematics(self, dela_cmd_deg, dela_ach_deg):
+    def get_sas_commands(self, t, x, cmod, x_trim):
         pass
     
     @abstractmethod
-    def elevator_kinematics(self, dele_cmd_deg, dele_ach_deg):
+    def aileron_kinematics(self, dela_cmd_rad, dela_ach_rad):
         pass
     
     @abstractmethod
-    def rudder_kinematics(self, delr_cmd_deg, delr_ach_deg):
+    def elevator_kinematics(self, dele_cmd_rad, dele_ach_rad):
+        pass
+    
+    @abstractmethod
+    def rudder_kinematics(self, delr_cmd_rad, delr_ach_rad):
         pass
     
     @abstractmethod

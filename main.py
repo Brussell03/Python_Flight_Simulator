@@ -11,7 +11,7 @@ from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
 from src.engine.numerical_integrators import RK4, adaptive_integration
 from src.utils.plotting import SimulatorPlotter
-from src.utils.constants import NUM_AUX
+from src.utils.constants import D2R, NUM_AUX, NUM_STATE
 
 def run_job(input_path):
     # Resolve the configuration file path
@@ -33,10 +33,10 @@ def run_job(input_path):
     state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'm_fuel', 'dela', 'dele', 'delr', 'delt']
     
     # 2. Trim & Analysis Dispatch
-    u_trim = np.zeros(4)
+    x_trim_ref = np.zeros(NUM_STATE - 1)
     if instruction_cfg.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
-        x_trim, u_trim, msg = trim_solver(eom, vehicle, amod, control_cfg, trim_cfg, x0)
+        x_trim, x_trim_ref, msg = trim_solver(eom, vehicle, amod, control_cfg, trim_cfg, wind_model, x0)
         
         if x_trim is not None:
             x0 = x_trim # Override initial conditions with trim state
@@ -44,13 +44,15 @@ def run_job(input_path):
             if instruction_cfg.get('perform_linearization', False):
                 print("\n--- Executing Linearization ---")
                 
-                A, B, core_state_names, core_control_names = compute_state_space(x_trim, u_trim, vehicle, control_cfg, state_names)
+                A, B, core_state_names, core_control_names = compute_state_space(x_trim, x_trim_ref, vehicle, control_cfg, state_names)
                 
                 analyze_mode_shapes(A, core_state_names)
                 plot_linear_response(A, B, t_end=30.0) # Set to 30s to watch the unstable modes diverge
                 advanced_stability_analysis(A, B, core_state_names, core_control_names)
     
     # 3. Execution Loop
+    if not instruction_cfg.get('simulate', False): return
+    
     print("\n--- Running 6-DOF Simulation ---")
     t_s = np.arange(t0_s, tf_s + dt_s, dt_s)
     nt_s = t_s.size
@@ -63,7 +65,7 @@ def run_job(input_path):
         t_span = (t0_s, tf_s + dt_s)
         
         t_s, x, aux_data_accum = adaptive_integration(
-            eom.solve_eom, t_span, t_s, x0, vehicle, control_cfg, u_trim, 
+            eom.solve_eom, t_span, t_s, x0, vehicle, control_cfg, x_trim_ref,
             method=integrator_type, rtol=1e-6, atol=1e-6
         )
         
@@ -82,11 +84,11 @@ def run_job(input_path):
             t_i = t_s[i]
             x_i = x[:, i]
             
-            x[:, i + 1], aux_tmp = RK4(eom.solve_eom, t_i, x_i, dt_s, vehicle, control_cfg, u_trim, dx_tmp, aux_tmp)
+            x[:, i + 1], aux_tmp = RK4(eom.solve_eom, t_i, x_i, dt_s, vehicle, control_cfg, x_trim_ref, dx_tmp, aux_tmp)
             aux_data_accum[:, i + 1] = aux_tmp
             
         # Ensure aux data lines up for t=0
-        _, aux_data_accum[:, 0] = eom.solve_eom(t_s[0], x[:, 0], dx_tmp, aux_tmp, vehicle, control_cfg, u_trim)
+        _, aux_data_accum[:, 0] = eom.solve_eom(t_s[0], x[:, 0], dx_tmp, aux_tmp, x_trim_ref, vehicle, control_cfg)
 
     # Vectorized Post-Processing
     print("\n--- Post-Processing Data ---")
@@ -112,6 +114,8 @@ def run_job(input_path):
             np.savez(save_path, **asdict(sim_data), meta=meta)
             print(f"\n--- Saving Output ---")
             print(f"Data saved to: {save_path}")
+        else:
+            plot_dir = None
 
         # Dispatch Plots Based on Config Booleans
         plot_cfg = output_cfg.get('plots', {})
@@ -119,7 +123,7 @@ def run_job(input_path):
         
         if any(plot_cfg.values()): 
             # Only instantiate plotter and make dir if at least one plot is True
-            os.makedirs(plot_dir, exist_ok=True)
+            if output_cfg.get('save_data', False): os.makedirs(plot_dir, exist_ok=True)
             plotter = SimulatorPlotter(sim_dict, title_prefix=vehicle.vehicle_name, plot_dir=plot_dir)
             
             if plot_cfg.get('6dof', False):         plotter.plot_6dof(show=show_plots)
