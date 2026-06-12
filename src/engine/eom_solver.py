@@ -74,7 +74,7 @@ class eom_solver:
         theta_rad = np.arcsin(np.clip(-C_b2n[2, 0], -1.0, 1.0))
         psi_rad   = np.arctan2(C_b2n[1, 0], C_b2n[0, 0])
         
-        vehicle.set_gnc_inputs(cmod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref)
+        vehicle.set_gnc_inputs(t, cmod, self.atmo_model, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref)
         
         speedbrake = cmod.get("speedbrake", False)
 

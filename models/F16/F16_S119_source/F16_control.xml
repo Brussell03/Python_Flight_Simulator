@@ -3,26 +3,20 @@
       PUBLIC "-//AIAA//DTD for Flight Dynamic Models - Functions 2.0//EN" 
           "http://www.daveml.org/DTDs/2p0/DAVEfunc.dtd">
 <DAVEfunc xmlns="http://daveml.org/2010/DAVEML">
-  <fileHeader name="Example F-16 guidance, navigation and control system">
+  <fileHeader name="F-16 simple control system">
     <author name="Bruce Jackson" org="NASA Langley Research Center" email="bruce.jackson@nasa.gov"/>
-    <creationDate date="2013-01-26"/>
+    <creationDate date="2012-08-09"/>
 
-    <fileVersion>Revision C, 2013-10-22</fileVersion>
+    <fileVersion>Revision F, 2013-10-22</fileVersion>
 
     <description> 
-      
-      Guidance, navigation and control system for DAVE-ML example F-16 aircraft model. Includes LQR inner-loop
+      Control system for DAVE-ML example F-16 aircraft model. Includes LQR inner-loop
       and loop-closure outerloop autopilot to follow altitude, courseline, and airspeed commands. The
       gains are set for a nominal flight condition of 10,013 ft MSL at Mach 0.525 (565.7 ft/s true
       airspeed or 287.8 kt equivalent) which correspond with atmospheric scenarios 11, 13, 15 and 16
       of reference 1.   Inputs are pilot primary flight controls, autopilot settings, mode selection 
       flags, and feedback of various flight condition parameters. Outputs are control surface deflection
       commands for the F-16 described in reference 2.
-      
-      This is a modified version of Rev E of the F16_control.dml file, with two
-      selectable navigators to circle either the North Pole or the intersection of the equator and
-      the International Date Line at a distance of 3 nautical miles.
-      
     </description>
 
     <reference refID="REF01" author="Jackson, E. Bruce; Shelton, Robert O.; et al." 
@@ -41,8 +35,37 @@
       refID="REF02" author="Garza, Fredrico R.; and Morelli, Eugene A."
       title="A Collection of Nonlinear Aircraft Simulations in MATLAB"
       accession="NASA TM-2003-212145" date="2003-01"/>
-    
-    <modificationRecord modID="A" date="2013-06-06">
+
+    <modificationRecord modID="A" date="2013-01-03">
+      <author name="Bruce Jackson" org="NASA Langley Research Center" email="bruce.jackson@nasa.gov"/>
+      <description>
+        The original version of this model, dated 2012-08-09, was a simple mixer that took pilot controls
+        and converted them into control surface deflections directly.
+        
+        This version includes an LQR-designed longitudinal and lateral-directional 
+        stabilization system as well as logic to follow altitude, airspeed, and ground track angle.
+        Lateral offset from course feedback can be provided to improve performance or zero can be provided
+        for just a heading command feature.
+        
+      </description>
+    </modificationRecord>    
+
+    <modificationRecord modID="B" date="2013-01-09">
+      <author name="Bruce Jackson" org="NASA Langley Research Center" email="bruce.jackson@nasa.gov"/>
+      <description>
+	Provided values for trimmed stick and throttle.
+      </description>
+    </modificationRecord>    
+
+    <modificationRecord modID="C" date="2013-01-11">
+      <author name="Bruce Jackson" org="NASA Langley Research Center" email="bruce.jackson@nasa.gov"/>
+      <description>
+	Moved trim values to proper location in file (no effect on realizations, just easier for
+	humans to interpret).
+      </description>
+    </modificationRecord>    
+
+    <modificationRecord modID="D" date="2013-06-06">
       <author name="Bruce Jackson" org="NASA Langley Research Center" email="bruce.jackson@nasa.gov"/>
       <description>
 	At the suggestion of Michael Madden, changed trimmedPilotControl_throttle and
@@ -52,7 +75,7 @@
       </description>
     </modificationRecord>    
 
-    <modificationRecord modID="B" date="2013-09-12">
+    <modificationRecord modID="E" date="2013-09-12">
       <author name="Bruce Jackson" org="NASA Langley Research Center" email="bruce.jackson@nasa.gov"/>
       <description>
 	After finding an error in the implementation of the subsonic aero database, new trim values
@@ -61,7 +84,7 @@
       </description>
     </modificationRecord>    
 
-    <modificationRecord modID="C" date="2013-10-22">
+    <modificationRecord modID="F" date="2013-10-22">
       <author name="Bruce Jackson" org="NASA Langley Research Center" email="bruce.jackson@nasa.gov"/>
       <description>
 	Incorporated OR function to ensure stability augmentation is on if autopilot function has been selected.
@@ -75,131 +98,124 @@
   <!-- ================== -->
 
   <variableDef name="pilotControl_throttle" varID="throttle" units="frac" minValue="0.0"
-    maxValue="1.0" initialValue="0.0">
+    maxValue="1.0">
     <description>Pilot throttle control position</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
   <variableDef name="pilotControl_long" varID="longStk" units="frac" sign="+AFT" minValue="-1.0"
-    maxValue="1.0" initialValue="0.0">
+    maxValue="1.0">
     <description>Longitudinal (pitch) control position</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
   <variableDef name="pilotControl_lat" varID="latStk" units="frac" sign="+RWD" minValue="-1.0"
-    maxValue="1.0" initialValue="0.0">
+    maxValue="1.0">
     <description>Lateral (roll) control position</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
   <variableDef name="pilotControl_yaw" varID="pedal" units="frac" sign="+ANR" minValue="-1.0"
-    maxValue="1.0" initialValue="0.0">
+    maxValue="1.0">
     <description>Directional (yaw) control position</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
   
-  <variableDef name="stabilityAugmentationOn_disc" varID="sasOn" units="nd" initialValue="0">
+  <variableDef name="stabilityAugmentationOn_disc" varID="sasOn" units="nd">
     <description>Stability augmentation engage flag (discrete); 1 = SAS engaged, 0 = SAS
       off</description>
     <isInput/>
   </variableDef>
 
-  <variableDef name="autopilotOn_disc" varID="apOn" units="nd" initialValue="0">
+  <variableDef name="autopilotOn_disc" varID="apOn" units="nd">
     <description>Autopilot engage flag (discrete); 1 = AP engaged, 0 = AP off (forces SAS
       on)</description>
-    <isInput/>
-  </variableDef>
-  
-  <variableDef name="selectCircumnavigator_disc" varID="circlePoleSW" units="nd" initialValue="0">
-    <description>Selects which navigator to use: 1 = circle N pole; 0 = circle equator/Int'l date line intersection</description>
-    <isInput/>
-  </variableDef>
-  
-  <!-- navigator inputs -->
-  
-  <variableDef name="geLatitude" varID="ownshipN_deg" units="deg" sign="+N" initialValue="0.0">
-    <description>Geodetic latitude of vehicle CM, +north of equator</description>
-    <isInput/>
-  </variableDef>
-  
-  <variableDef name="geLongitude" varID="ownshipE_deg" units="deg" sign="+E" initialValue="0.0">
-    <description>Geodetic longitude of vehicle CM, +east of prime meridian</description>
     <isInput/>
   </variableDef>
 
   <!-- autopilot command inputs -->
 
-  <variableDef name="equivalentAirspeedCommand" varID="keasCmd" units="nmi_h" initialValue="0.0">
+  <variableDef name="equivalentAirspeedCommand" varID="keasCmd" units="nmi_h">
     <description>Equivalent airspeed command (kt) to autospeed logic</description>
     <isInput/>
   </variableDef>
 
-  <variableDef name="altitudeMslCommand" varID="altCmd" units="ft" initialValue="0.0">
+  <variableDef name="altitudeMslCommand" varID="altCmd" units="ft">
     <description>Commanded altitude above sea level (ft) for autopilot</description>
+    <isInput/>
+  </variableDef>
+
+  <variableDef name="lateralDeviationError" varID="latOffset" units="ft" sign="+RT">
+    <description>Lateral deviation from desired courseline (ft, +right of course) for autopilot</description>
+    <isInput/>
+  </variableDef>
+  
+  <variableDef name="trueBaseCourseCommand" varID="baseChiCmd" units="deg" sign="+CCFN">
+    <description>True heading of desired ground track (deg, +clockwise from north) for autopilot</description>
     <isInput/>
   </variableDef>
   
   <!-- sensor feedbacks for SAS and AP -->
 
-  <variableDef name="altitudeMsl" varID="altMsl" units="ft" initialValue="0.0">
+  <variableDef name="altitudeMsl" varID="altMsl" units="ft">
     <description>Geometric altitude above mean sea level (ft)</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="equivalentAirspeed" varID="Vequiv" units="nmi_h" initialValue="0.0">
+  <variableDef name="equivalentAirspeed" varID="Vequiv" units="nmi_h">
     <description>Equivalent airspeed (kt)</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="angleOfAttack" varID="alpha" units="deg" initialValue="0.0">
+  <variableDef name="angleOfAttack" varID="alpha" units="deg">
     <description>Angle of attack (deg)</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="angleOfSideslip" varID="beta" units="deg" sign="+RT" initialValue="0.0">
+  <variableDef name="angleOfSideslip" varID="beta" units="deg" sign="+RT">
     <description>Angle of sideslipe (deg), +wind in the pilot's right ear</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="eulerAngle_Roll" varID="phi" units="deg" sign="+RWD" initialValue="0.0">
+  <variableDef name="eulerAngle_Roll" varID="phi" units="deg" sign="+RWD">
     <description>Roll angle of vehicle relative to local level (deg), +right wing down</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="eulerAngle_Pitch" varID="theta" units="deg" sign="+ANU" initialValue="0.0">
+  <variableDef name="eulerAngle_Pitch" varID="theta" units="deg" sign="+ANU">
     <description>Pitch angle of vehicle relative to local level (deg), +nose up</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="eulerAngle_Yaw" varID="psi" units="deg" sign="+CWFN" initialValue="0.0">
+  <variableDef name="eulerAngle_Yaw" varID="psi" units="deg" sign="+CWFN">
     <description>Yaw angle of vehicle relative to true North (deg), +clockwise</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
   
-  <variableDef name="bodyAngularRate_Roll" varID="pb" units="rad_s" sign="+RWD" initialValue="0.0">
+  <variableDef name="bodyAngularRate_Roll" varID="pb" units="rad_s" sign="+RWD">
     <description>Vehicle body-axis roll rate (rad/s), +right wing down</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="bodyAngularRate_Pitch" varID="qb" units="rad_s" sign="+ANU" initialValue="0.0">
+  <variableDef name="bodyAngularRate_Pitch" varID="qb" units="rad_s" sign="+ANU">
     <description>Vehicle body-axis pitch rate (rad/s), +aircraft nose up</description>
     <isInput/>
     <isStdAIAA/>
   </variableDef>
 
-  <variableDef name="bodyAngularRate_Yaw" varID="rb" units="rad_s" sign="+ANR" initialValue="0.0">
+  <variableDef name="bodyAngularRate_Yaw" varID="rb" units="rad_s" sign="+ANR">
     <description>Vehicle body-axis yaw rate (rad/s) +aircraft nose right</description>
     <isInput/>
     <isStdAIAA/>
@@ -220,7 +236,7 @@
   <!-- ================== -->
   <!--  Local variables   -->
   <!-- ================== -->
-  
+
   <!-- Force SAS on if AP on -->
 
   <variableDef name="forceStabAugOn_disc" varID="fsasOn" units="nd">
@@ -251,7 +267,7 @@
       +nose up</description>
   </variableDef>
   
-  <variableDef name="designEquivalentAirspeed" varID="trimmedKEAS" units="nmi_h"
+  <variableDef name="designEquivalentAirspeed" varID="trimmedKEAS" units="nim_h"
     initialValue="2.878088596053291e+02">
     <description>Flight control system design equivalent airspeed (kt)</description>
   </variableDef>
@@ -310,245 +326,6 @@
           <plus/>
           <ci>deltaThetaCmd</ci>
           <ci>trimmedTheta</ci>
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <!-- Navigator constants -->
-
-  <variableDef name="deg_to_ft" varID="deg_to_ft" units="ft_d">
-    <description>Conversion factor from degrees of latitude/longitude to ft holds for latitude
-      always; holds for longitude near equator </description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <times/>
-          <cn>60.0</cn>     <!-- n.m. per deg -->
-          <cn>6076.12</cn>  <!-- ft per n.m. -->
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="circleRadius_ft" varID="circleRadius_ft" units="ft">
-    <description>Distance to circle from target (3 nm)</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <times/>
-          <cn>3.0</cn>      <!-- desired n.m. -->
-          <cn>6076.12</cn>  <!-- ft per n.m. -->
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-
-  <!-- North pole navigator -->
-  
-  <variableDef name="lateralDeviationErrorPolar" varID="latOffsetPolar" units="ft" sign="+RT">
-    <description>Lateral deviation from desired courseline (ft, +right of course) for CCW circle
-      around N. pole</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <minus/>
-          <apply>
-            <times/>
-            <ci>deg_to_ft</ci>
-            <apply>
-              <minus/>
-              <cn>90.0</cn>
-              <ci>ownshipN_deg</ci>
-            </apply>
-          </apply>
-          <ci>circleRadius_ft</ci>
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="trueBaseCourseCommandPolar" varID="baseChiCmdPolar" units="deg" sign="+CCFN" initialValue="90.0">
-    <description>True heading of desired ground track (deg, +clockwise from north) for CCW circle around N. pole</description>
-  </variableDef>
-  
-  <!-- Equator / International Date Line navigator -->
-  
-  <variableDef name="degEFromTgt" varID="degEFromTgt" units="deg" sign="+E">
-    <description>Must convert longitude, defined as +E and -W of prime meridian, to number of
-      degrees east (+) or west (-) of international date line</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <piecewise>
-            <piece>  <!-- if longitude > 0, then subtract 180 to get neg deg (w) of IDL -->
-              <apply>
-                <minus/>
-                <ci>ownshipE_deg</ci>
-                <cn>180.0</cn>
-              </apply>
-              <apply>
-                <gt/>
-                <ci>ownshipE_deg</ci>
-                <cn>0.</cn>
-              </apply>
-            </piece>
-            <otherwise> <!-- otherwise add 180 to (neg) longitude to get pos deg E of IDL -->
-              <apply>
-                <plus/>
-                <ci>ownshipE_deg</ci>
-                <cn>180.0</cn>
-              </apply>
-            </otherwise>
-          </piecewise>
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="ftNFromTgt" varID="ownshipN_ft" units="ft" sign="+N">
-    <description>Convert latitude in deg to ft</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <times/>
-          <ci>ownshipN_deg</ci>
-          <ci>deg_to_ft</ci>
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="ftEFromTgt" varID="ownshipE_ft" units="ft" sign="+E">
-    <description>Convert degrees of longitude from target to feet (+E) with correction to scaling
-      for latitude</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <times/>
-          <ci>degEFromTgt</ci>
-          <ci>deg_to_ft</ci>
-          <apply>
-            <cos/>
-            <apply>
-              <times/>
-              <ci>ownshipN_deg</ci>
-              <apply>
-                <divide/>
-                <cn>3.14159265</cn>
-                <cn>180.0</cn>
-              </apply>                                  <!-- pi/180  -->
-            </apply>                       <!-- ownshipN_deg*pi/180  -->
-          </apply>                     <!-- cos(ownshipN_deg*pi/180) -->
-        </apply> <!-- degEFromTgt*deg_to_ft*cos(ownshipN_deg*pi/180) -->
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="radiusFromTgt" varID="ftFromTgt" units="ft">
-    <description>distance from turn point in ft</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <power/>
-          <apply>
-            <plus/>
-            <apply>
-              <times/>
-              <ci>ownshipE_ft</ci>
-              <ci>ownshipE_ft</ci>
-            </apply>          <!-- E^2 -->
-            <apply>
-              <times/>
-              <ci>ownshipN_ft</ci>
-              <ci>ownshipN_ft</ci>
-            </apply>                <!-- N^2 -->
-          </apply>            <!-- E^2 + N^2   -->
-          <cn>0.5</cn>  <!-- sqrt( E^2 + N^2 ) -->
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="trueBaseCourseCommandEquatorIDL" varID="baseChiCmdEquatorIDL" units="deg" sign="+CCFN" initialValue="90.0">
-    <description>True heading of desired ground track (deg, +clockwise from north) for CCW circle
-      around equator/international date line intersection</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <divide/>
-          <apply>
-            <times/>
-            <apply>
-              <csymbol definitionURL="http://daveml.org/function_spaces.html#atan2" encoding="text">atan2</csymbol>
-              <ci>ownshipN_ft</ci>
-              <ci>ownshipE_ft</ci>
-            </apply>         <!-- atan2(E, N)        -->
-            <cn>-180.0</cn>
-          </apply>     <!--  -1.0*atan2(E, N)*180    -->
-          <cn>3.14159265</cn>
-        </apply>     <!--    -1.0*atan2(E, N)*180/pi -->
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="lateralDeviationErrorEquatorIDL" varID="latOffsetEquatorIDL" units="ft" sign="+RT">
-    <description>Lateral deviation from desired courseline (ft, +right of course) for CCW circle
-      around equator/international date line intersection</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <minus/>
-          <ci>ftFromTgt</ci>
-          <ci>circleRadius_ft</ci>
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <!-- autopilot input selector switches -->
-  
-  <variableDef name="lateralDeviation" varID="latOffset" units="ft" sign="+RT">
-    <description>Selected lateral deviation to use from one of two included circumnavigators</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <piecewise>
-            <piece>
-              <ci>latOffsetPolar</ci>
-              <apply>
-                <gt/>
-                <ci>circlePoleSW</ci>
-                <cn>0.5</cn>
-              </apply>
-            </piece>
-            <otherwise>
-              <ci>latOffsetEquatorIDL</ci>
-            </otherwise>
-          </piecewise>
-        </apply>
-      </math>
-    </calculation>
-  </variableDef>
-  
-  <variableDef name="trueBaseCourseCommand" varID="baseChiCmd" units="deg" sign="+CWFN">
-    <description>Selected base course to use from one of two included circumnavigators</description>
-    <calculation>
-      <math xmlns="http://www.w3.org/1998/Math/MathML">
-        <apply>
-          <piecewise>
-            <piece>
-              <ci>baseChiCmdPolar</ci>
-              <apply>
-                <gt/>
-                <ci>circlePoleSW</ci>
-                <cn>0.5</cn>
-              </apply>
-            </piece>
-            <otherwise>
-              <ci>baseChiCmdEquatorIDL</ci>
-            </otherwise>
-          </piecewise>
         </apply>
       </math>
     </calculation>

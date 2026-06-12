@@ -255,6 +255,23 @@
     </calculation>
   </variableDef>
   
+  <!-- trim condition values (for LQR SAS) -->
+
+  <variableDef name="designAngleOfAttack" varID="trimmedAlpha" units="deg" initialValue="2.653813535191715">
+    <description>Flight control system design angle of attack (deg)</description>
+  </variableDef>
+
+  <variableDef name="designEulerAngle_Pitch" varID="trimmedTheta" units="deg" sign="+ANU"
+    initialValue="2.653813535191715">
+    <description>Flight control system design pitch angle of vehicle relative to local level (deg),
+      +nose up</description>
+  </variableDef>
+  
+  <variableDef name="designEquivalentAirspeed" varID="trimmedKEAS" units="nim_h"
+    initialValue="2.878088596053291e+02">
+    <description>Flight control system design equivalent airspeed (kt)</description>
+  </variableDef>
+  
   <!-- Altitude compensator (autopilot function) -->
   
   <variableDef name="autopilotAltErrorFeedbackGain" varID="thetaCmdAltErrGain" 
@@ -464,23 +481,6 @@
         </apply>
       </math>
     </calculation>
-  </variableDef>
-  
-  <!-- trim condition values (for LQR SAS) -->
-
-  <variableDef name="designAngleOfAttack" varID="trimmedAlpha" units="deg" initialValue="2.653813535191715">
-    <description>Flight control system design angle of attack (deg)</description>
-  </variableDef>
-
-  <variableDef name="designEulerAngle_Pitch" varID="trimmedTheta" units="deg" sign="+ANU"
-    initialValue="2.653813535191715">
-    <description>Flight control system design pitch angle of vehicle relative to local level (deg),
-      +nose up</description>
-  </variableDef>
-  
-  <variableDef name="designEquivalentAirspeed" varID="trimmedKEAS" units="nim_h"
-    initialValue="2.878088596053291e+02">
-    <description>Flight control system design equivalent airspeed (kt)</description>
   </variableDef>
   
   <!-- use commanded V, theta, phi if autopilot is selected, or use trimmed values -->

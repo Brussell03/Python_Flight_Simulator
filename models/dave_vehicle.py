@@ -6,7 +6,7 @@ import pyJanus
 from models.vehicle_base import Vehicle
 from src.utils.unit_conversion import UnitConverter
 from src.utils.interpolators import fastInterp1
-from src.utils.constants import D2R, R2D
+from src.utils.constants import D2R, FT2M, R2D
 
 class DAVEVehicle(Vehicle):
     def get_var_def(self, system, *var_names):
@@ -122,55 +122,108 @@ class DAVEVehicle(Vehicle):
             self.M_thrust_n_ref = self.get_var_def(self.prop_sys, "TEN")
         
         # ==========================================
-        # 4. GNC System Initialization
+        # 4. Control System Initialization
         # ==========================================
         try:
-            self.gnc_sys = pyJanus.Janus(gnc_dml_path)
+            self.control_sys = pyJanus.Janus(control_dml_path)
         except Exception as e:
-            self.gnc_sys = None
-            if prop_dml_path is not None:
-                print(f"GNC system not found at: {gnc_dml_path}")
+            self.control_sys = None
+            if control_dml_path is not None:
+                print(f"Control system not found at: {control_dml_path}")
                 print(e)
         
-        if self.gnc_sys is not None:
+        self.maneuver_started = False
+        self.maneuver_start_lat_rad = 0
+        self.maneuver_start_long_rad = 0
+        self.maneuver_start_heading_rad = 0
+        
+        if self.control_sys is not None:
             # Inputs
-            self.throttle_pilot_ref = self.get_var_def(self.gnc_sys, "throttle") # [0, 1]
-            self.pitch_stick_ref = self.get_var_def(self.gnc_sys, "longStk") # [-1, 1]
-            self.roll_stick_ref = self.get_var_def(self.gnc_sys, "latStk") # [-1, 1]
-            self.yaw_pedal_ref = self.get_var_def(self.gnc_sys, "pedal") # [-1, 1]
-            self.sas_toggle_ref = self.get_var_def(self.gnc_sys, "sasOn") # 0 or 1
-            self.ap_toggle_ref = self.get_var_def(self.gnc_sys, "apOn") # 0 or 1
-            self.circumnavigator_toggle_ref = self.get_var_def(self.gnc_sys, "circlePoleSW") # 0 or 1
-            
-            # Navigator inputs
-            self.lat_ref = self.get_var_def(self.gnc_sys, "ownshipN_deg")
-            self.long_ref = self.get_var_def(self.gnc_sys, "ownshipE_deg")
+            self.throttle_pilot_ref = self.get_var_def(self.control_sys, "throttle") # [0, 1]
+            self.pitch_stick_ref = self.get_var_def(self.control_sys, "longStk") # [-1, 1]
+            self.roll_stick_ref = self.get_var_def(self.control_sys, "latStk") # [-1, 1]
+            self.yaw_pedal_ref = self.get_var_def(self.control_sys, "pedal") # [-1, 1]
+            self.sas_toggle_ref = self.get_var_def(self.control_sys, "sasOn") # 0 or 1
+            self.ap_toggle_ref = self.get_var_def(self.control_sys, "apOn") # 0 or 1
             
             # Autopilot command inputs
-            self.equiv_airspeed_cmd_ref = self.get_var_def(self.gnc_sys, "keasCmd")
-            self.alt_cmd_ref = self.get_var_def(self.gnc_sys, "altCmd")
+            self.equiv_airspeed_cmd_ref = self.get_var_def(self.control_sys, "keasCmd") # Equivalent airspeed command
+            self.alt_cmd_ref = self.get_var_def(self.control_sys, "altCmd") # Commanded altitude above sea level
+            self.lat_dev_error_cmd_ref = self.get_var_def(self.control_sys, "latOffset") # +Right from course
+            self.heading_cmd_ref = self.get_var_def(self.control_sys, "baseChiCmd") # True heading of desired ground track (+clockwise from north)
             
             # Sensor feedbacks for SAS and AP
-            self.alt_ref = self.get_var_def(self.gnc_sys, "altMsl")
-            self.equiv_airspeed_ref = self.get_var_def(self.gnc_sys, "Vequiv")
-            self.alpha_gnc_def = self.get_var_def(self.gnc_sys, "alpha")
-            self.beta_gnc_def = self.get_var_def(self.gnc_sys, "beta")
-            self.phi_ref = self.get_var_def(self.gnc_sys, "phi")
-            self.theta_ref = self.get_var_def(self.gnc_sys, "theta")
-            self.psi_ref = self.get_var_def(self.gnc_sys, "psi")
-            self.p_b_gnc_ref = self.get_var_def(self.gnc_sys, "pb")
-            self.q_b_gnc_ref = self.get_var_def(self.gnc_sys, "qb")
-            self.r_b_gnc_ref = self.get_var_def(self.gnc_sys, "rb")
+            self.alt_ref = self.get_var_def(self.control_sys, "altMsl")
+            self.equiv_airspeed_ref = self.get_var_def(self.control_sys, "Vequiv")
+            self.alpha_gnc_def = self.get_var_def(self.control_sys, "alpha")
+            self.beta_gnc_def = self.get_var_def(self.control_sys, "beta")
+            self.phi_ref = self.get_var_def(self.control_sys, "phi")
+            self.theta_ref = self.get_var_def(self.control_sys, "theta")
+            self.psi_ref = self.get_var_def(self.control_sys, "psi")
+            self.p_b_gnc_ref = self.get_var_def(self.control_sys, "pb")
+            self.q_b_gnc_ref = self.get_var_def(self.control_sys, "qb")
+            self.r_b_gnc_ref = self.get_var_def(self.control_sys, "rb")
             
             # Trimmed values of longitudinal controls
-            self.delt_trim_ref = self.get_var_def(self.gnc_sys, "throttleTrim") # [0, 1]
-            self.pitch_stick_trim_ref = self.get_var_def(self.gnc_sys, "longStkTrim") # [0, 1]
+            self.delt_trim_ref = self.get_var_def(self.control_sys, "throttleTrim") # [0, 1]
+            self.pitch_stick_trim_ref = self.get_var_def(self.control_sys, "longStkTrim") # [0, 1]
             
             # Outputs
-            self.dele_ref = self.get_var_def(self.gnc_sys, "el") # Deflection angle
-            self.dela_ref = self.get_var_def(self.gnc_sys, "ail") # Deflection angle
-            self.delr_ref = self.get_var_def(self.gnc_sys, "rdr") # Deflection angle
-            self.delt_out_ref = self.get_var_def(self.gnc_sys, "PWR") # [0, 100]
+            self.dele_ref = self.get_var_def(self.control_sys, "el") # Deflection angle
+            self.dela_ref = self.get_var_def(self.control_sys, "ail") # Deflection angle
+            self.delr_ref = self.get_var_def(self.control_sys, "rdr") # Deflection angle
+            self.delt_out_ref = self.get_var_def(self.control_sys, "PWR") # [0, 100]
+        
+        # # ==========================================
+        # # 4. GNC System Initialization
+        # # ==========================================
+        # try:
+        #     self.gnc_sys = pyJanus.Janus(gnc_dml_path)
+        # except Exception as e:
+        #     self.gnc_sys = None
+        #     if gnc_dml_path is not None:
+        #         print(f"GNC system not found at: {gnc_dml_path}")
+        #         print(e)
+        
+        # if self.gnc_sys is not None:
+        #     # Inputs
+        #     self.throttle_pilot_ref = self.get_var_def(self.gnc_sys, "throttle") # [0, 1]
+        #     self.pitch_stick_ref = self.get_var_def(self.gnc_sys, "longStk") # [-1, 1]
+        #     self.roll_stick_ref = self.get_var_def(self.gnc_sys, "latStk") # [-1, 1]
+        #     self.yaw_pedal_ref = self.get_var_def(self.gnc_sys, "pedal") # [-1, 1]
+        #     self.sas_toggle_ref = self.get_var_def(self.gnc_sys, "sasOn") # 0 or 1
+        #     self.ap_toggle_ref = self.get_var_def(self.gnc_sys, "apOn") # 0 or 1
+        #     self.circumnavigator_toggle_ref = self.get_var_def(self.gnc_sys, "circlePoleSW") # 0 or 1
+            
+        #     # Navigator inputs
+        #     self.lat_ref = self.get_var_def(self.gnc_sys, "ownshipN_deg")
+        #     self.long_ref = self.get_var_def(self.gnc_sys, "ownshipE_deg")
+            
+        #     # Autopilot command inputs
+        #     self.equiv_airspeed_cmd_ref = self.get_var_def(self.gnc_sys, "keasCmd")
+        #     self.alt_cmd_ref = self.get_var_def(self.gnc_sys, "altCmd")
+            
+        #     # Sensor feedbacks for SAS and AP
+        #     self.alt_ref = self.get_var_def(self.gnc_sys, "altMsl")
+        #     self.equiv_airspeed_ref = self.get_var_def(self.gnc_sys, "Vequiv")
+        #     self.alpha_gnc_def = self.get_var_def(self.gnc_sys, "alpha")
+        #     self.beta_gnc_def = self.get_var_def(self.gnc_sys, "beta")
+        #     self.phi_ref = self.get_var_def(self.gnc_sys, "phi")
+        #     self.theta_ref = self.get_var_def(self.gnc_sys, "theta")
+        #     self.psi_ref = self.get_var_def(self.gnc_sys, "psi")
+        #     self.p_b_gnc_ref = self.get_var_def(self.gnc_sys, "pb")
+        #     self.q_b_gnc_ref = self.get_var_def(self.gnc_sys, "qb")
+        #     self.r_b_gnc_ref = self.get_var_def(self.gnc_sys, "rb")
+            
+        #     # Trimmed values of longitudinal controls
+        #     self.delt_trim_ref = self.get_var_def(self.gnc_sys, "throttleTrim") # [0, 1]
+        #     self.pitch_stick_trim_ref = self.get_var_def(self.gnc_sys, "longStkTrim") # [0, 1]
+            
+        #     # Outputs
+        #     self.dele_ref = self.get_var_def(self.gnc_sys, "el") # Deflection angle
+        #     self.dela_ref = self.get_var_def(self.gnc_sys, "ail") # Deflection angle
+        #     self.delr_ref = self.get_var_def(self.gnc_sys, "rdr") # Deflection angle
+        #     self.delt_out_ref = self.get_var_def(self.gnc_sys, "PWR") # [0, 100]
         
         # ==========================================
         # 5. Actuators
@@ -179,7 +232,7 @@ class DAVEVehicle(Vehicle):
         self.tau_a_s = 0.02
         self.tau_e_s = 0.02
         self.tau_r_s = 0.02
-        self.tau_t_s = 0.2
+        self.tau_t_s = 0.1
         
         # Actuation Position Limits [min_rad, max_rad]
         self.lim_a_pos_rad = np.array([-21.5, 21.5]) * D2R
@@ -338,9 +391,11 @@ class DAVEVehicle(Vehicle):
             return 0, 0, 0, 0
         return trim_list[-4:]
     
-    def set_gnc_inputs(self, cmod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
+    def set_gnc_inputs(self, t_s, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return
+        
+        rho_0 = 1.225 # Standard sea-level density [kg/m^3]
         
         # Pilot inputs
         self.set_var_val(self.throttle_pilot_ref, 0) # [0, 1]
@@ -349,8 +404,8 @@ class DAVEVehicle(Vehicle):
         self.set_var_val(self.yaw_pedal_ref, 0) # [-1, 1]
         
         # Navigator inputs
-        self.set_var_val(self.lat_ref, lat_rad)
-        self.set_var_val(self.long_ref, long_rad)
+        # self.set_var_val(self.lat_ref, lat_rad)
+        # self.set_var_val(self.long_ref, long_rad)
         
         if cmod.get("sas", False):
             self.set_var_val(self.sas_toggle_ref, 1) # Engaged
@@ -358,14 +413,53 @@ class DAVEVehicle(Vehicle):
             self.set_var_val(self.sas_toggle_ref, 0)
         
         # Autopilot command inputs
-        if cmod.get("ap", False):
+        ap_cfg = cmod.get('autopilot', {})
+        ap_enable_time_s = ap_cfg.get("enable_time_s", 1)
+        if ap_cfg.get("enabled", False) and t_s >= ap_enable_time_s:
+            heading = ap_cfg.get('psi_deg') * D2R if ap_cfg.get('psi_deg') is not None else psi_rad
+            
+            if self.maneuver_started is False:
+                self.maneuver_start_lat_rad = lat_rad
+                self.maneuver_start_long_rad = long_rad
+                self.maneuver_start_heading_rad = heading
+                self.maneuver_started = True
+            
             self.set_var_val(self.ap_toggle_ref, 1) # Engaged
-            self.set_var_val(self.equiv_airspeed_cmd_ref, 0)
-            self.set_var_val(self.alt_cmd_ref, 0)
+            
+            h_cmd_m = ap_cfg.get('h_ft') * FT2M
+            self.set_var_val(self.alt_cmd_ref, h_cmd_m)
+            
+            equiv_airspeed_cmd_mps = ap_cfg.get('V_equiv_mps', None)
+            if equiv_airspeed_cmd_mps is None:
+                true_airspeed_cmd_mps = ap_cfg.get('V_mps')
+                rho_cmd_kgpm3 = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], h_cmd_m)
+                equiv_airspeed_cmd_mps = true_airspeed_cmd_mps * math.sqrt(rho_cmd_kgpm3 / rho_0)
+                
+            self.set_var_val(self.equiv_airspeed_cmd_ref, equiv_airspeed_cmd_mps)
+            
+            if ap_cfg.get('lateral_move', False):
+                
+                # --- Lateral Deviation Calculation ---
+                # Calculate linear displacements in meters
+                dy = (lat_rad - self.maneuver_start_lat_rad) * 6378137.0
+                dx = (long_rad - self.maneuver_start_long_rad) * math.cos(self.maneuver_start_lat_rad) * 6378137.0
+                
+                # Project displacement onto the normal of the starting heading
+                # Heading is clockwise from North (0 rad is North, pi/2 is East)
+                # Normal vector n = [cos(psi), -sin(psi)]
+                lat_dev_m = (dx * math.cos(self.maneuver_start_heading_rad)) - (dy * math.sin(self.maneuver_start_heading_rad))
+                
+                lat_dev_target_m = ap_cfg.get('lat_dev_ft', 0) * FT2M
+                
+                # print(lat_dev_m)
+                # print(lat_dev_target_m + lat_dev_m)
+                self.set_var_val(self.lat_dev_error_cmd_ref, lat_dev_target_m + lat_dev_m)
+            else:
+                self.set_var_val(self.lat_dev_error_cmd_ref, 0)
+            
+            self.set_var_val(self.heading_cmd_ref, heading)
         else:
             self.set_var_val(self.ap_toggle_ref, 0)
-        
-        rho_0 = 1.225 # Standard sea-level density [kg/m^3]
         
         # Sensor feedbacks for SAS and AP
         if cmod.get("sas", False) or cmod.get("ap", False):
@@ -385,21 +479,10 @@ class DAVEVehicle(Vehicle):
             self.set_var_val(self.q_b_gnc_ref, q_b_rps)
             self.set_var_val(self.r_b_gnc_ref, r_b_rps)
         
-        if cmod.get("circumnavigator"):
-            self.set_var_val(self.circumnavigator_toggle_ref, 1) # circle N pole
-        else:
-            self.set_var_val(self.circumnavigator_toggle_ref, 0) # circle equator/Int'l date line intersection
-        
-        # # Scale throttle to [0, 1] from 0 - 100%
-        # # throttle_trim_norm = delt_trim_pct / 100.0
-        # throttle_trim_norm = 10.45 / 100.0
-        # self.set_var_val(self.delt_trim_ref, throttle_trim_norm)
-        
-        # # Normalize pitch stick trim to perfectly invert the XML's elevator gearing
-        # # XML formula: el = -25.0 * totLongStk
-        # # pitch_stick_trim_norm = max(min(dele_trim_rad*R2D / -25.0, 1.0), -1.0)
-        # pitch_stick_trim_norm = max(min(-0.73965 / -25.0, 1.0), -1.0)
-        # self.set_var_val(self.pitch_stick_trim_ref, pitch_stick_trim_norm)
+        # if cmod.get("circumnavigator"):
+        #     self.set_var_val(self.circumnavigator_toggle_ref, 1) # circle N pole
+        # else:
+        #     self.set_var_val(self.circumnavigator_toggle_ref, 0) # circle equator/Int'l date line intersection
         
         # --- Trimmed Values of Longitudinal Controls ---
         if x_trim_ref is not None:
@@ -407,7 +490,7 @@ class DAVEVehicle(Vehicle):
             
             # Scale throttle to [0, 1] from 0 - 100%
             # throttle_trim_norm = delt_trim_pct / 100.0
-            throttle_trim_norm = 10 / 100.0
+            throttle_trim_norm = 8 / 100
             self.set_var_val(self.delt_trim_ref, throttle_trim_norm)
             
             # Normalize pitch stick trim to perfectly invert the XML's elevator gearing
@@ -417,8 +500,9 @@ class DAVEVehicle(Vehicle):
             self.set_var_val(self.pitch_stick_trim_ref, pitch_stick_trim_norm)
         else:
             # Fallback if no trim vector is provided
-            self.set_var_val(self.delt_trim_ref, 0.0)
-            self.set_var_val(self.pitch_stick_trim_ref, 0.0)
+            self.set_var_val(self.delt_trim_ref, 0.08)
+            pitch_stick_trim_norm = max(min(-0.74 / -25.0, 1.0), -1.0)
+            self.set_var_val(self.pitch_stick_trim_ref, pitch_stick_trim_norm)
     
     def get_sas_commands(self, t, x, cmod, x_trim_ref):
         """

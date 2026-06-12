@@ -33,7 +33,7 @@ def run_job(input_path):
     state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'm_fuel', 'dela', 'dele', 'delr', 'delt']
     
     # 2. Trim & Analysis Dispatch
-    x_trim_ref = np.zeros(NUM_STATE - 1)
+    x_trim_ref = None
     if instruction_cfg.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
         x_trim, x_trim_ref, msg = trim_solver(eom, vehicle, amod, control_cfg, trim_cfg, wind_model, x0)

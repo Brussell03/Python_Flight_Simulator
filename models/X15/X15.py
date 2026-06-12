@@ -341,7 +341,7 @@ class X15(Vehicle):
             return 0, 0, 0, 0
         return trim_list[-4:]
     
-    def set_gnc_inputs(self, cmod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
+    def set_gnc_inputs(self, t_s, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
         pass
 
     def get_sas_commands(self, t, x, cmod, x_trim_ref):

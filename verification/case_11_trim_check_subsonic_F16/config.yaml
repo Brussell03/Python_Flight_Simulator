@@ -53,8 +53,8 @@ initial_conditions:
     v_n_fps: 400
     w_n_fps: 0
 
-    p_dps: 0
-    q_dps: 0
+    p_dps: 0.002954344
+    q_dps: -0.002954344
     r_dps: 0
     phi_deg: 0
     theta_deg: 2.653813535191715

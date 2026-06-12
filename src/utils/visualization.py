@@ -40,7 +40,7 @@ def fdm_callback(fdm_data, event_pipe):
         fdm_data['v_east_ft_per_s']   = v_east_ft_per_s_parent
         fdm_data['v_down_ft_per_s']   = v_down_ft_per_s_parent
         
-        fdm_data['eng_state']      = [2, 0, 0, 0]
+        fdm_data['eng_state']      = [2, 2, 2, 2]
         
         fdm_data['elevator']       = -dele_rad_child
         fdm_data['left_aileron']   = -dela_rad_child
