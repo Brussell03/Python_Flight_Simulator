@@ -265,7 +265,7 @@ class X15(Vehicle):
 
         return Fx_b_kgmps2, Fy_b_kgmps2, Fz_b_kgmps2, l_b_kgm2ps2, m_b_kgm2ps2, n_b_kgm2ps2
     
-    def pitch_control(self, t_s, q_b_rps, cmod, dele_trim_rad):
+    def pitch_control(self, t_s, q_b_rps, cmod):
         dele_stick_deg = 0.0
         
         if cmod["elevator"]:
@@ -288,7 +288,7 @@ class X15(Vehicle):
         return (dele_sas_deg + dele_stick_deg) * D2R
 
     # Roll control via aileron
-    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod, dela_trim_rad):
+    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod):
         dela_stick_deg = 0.0
         
         if cmod["aileron"]:
@@ -311,7 +311,7 @@ class X15(Vehicle):
         return (dela_sas_deg + dela_stick_deg) * D2R
 
     # Yaw control via rudder
-    def yaw_control(self, t_s, r_b_rps, cmod, delr_trim_rad):
+    def yaw_control(self, t_s, r_b_rps, cmod):
         delr_pedal_deg = 0.0
         
         if cmod["rudder"]:
@@ -333,7 +333,7 @@ class X15(Vehicle):
         return (delr_sas_deg + delr_pedal_deg) * D2R
 
     # Yaw control via rudder
-    def throttle_control(self, t_s, cmod, delt_trim_pct):
+    def throttle_control(self, t_s, cmod):
         return 0
 
     def get_control_trim_values(self, trim_list):
@@ -341,7 +341,7 @@ class X15(Vehicle):
             return 0, 0, 0, 0
         return trim_list[-4:]
     
-    def set_gnc_inputs(self, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
+    def set_gnc_inputs(self, cmod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
         pass
 
     def get_sas_commands(self, t, x, cmod, x_trim_ref):
@@ -354,9 +354,9 @@ class X15(Vehicle):
         dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct = self.get_control_trim_values(x_trim_ref)
         
         # Calculate dynamic commands (Stick + Feedback)
-        dela_dynamic_rad = self.roll_control(t, p_b_rps, r_b_rps, cmod, dela_trim_rad)
-        dele_dynamic_rad = self.pitch_control(t, q_b_rps, cmod, dele_trim_rad)
-        delr_dynamic_rad = self.yaw_control(t, r_b_rps, cmod, delr_trim_rad)
+        dela_dynamic_rad = self.roll_control(t, p_b_rps, r_b_rps, cmod)
+        dele_dynamic_rad = self.pitch_control(t, q_b_rps, cmod)
+        delr_dynamic_rad = self.yaw_control(t, r_b_rps, cmod)
         
         # Superimpose dynamic commands onto trim baseline
         dela_cmd_rad = dela_trim_rad + dela_dynamic_rad

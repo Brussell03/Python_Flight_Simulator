@@ -1,6 +1,6 @@
 meta:
-    job_name: "Trim_Check_Subsonic_F16"
-    description: "Subsonic F16 Trim Check"
+    job_name: "Trim_Check_Supersonic_F16"
+    description: "Supersonic F16 Trim Check"
 
 vehicle:
     model: "F16"
@@ -9,7 +9,7 @@ vehicle:
 instructions:
     earth_model: "WGS84"
     gravity_type: "J2"
-    integrator: "RK45"
+    integrator: "RK4"
     simulate: true
     wind: false
     perform_trim: false
@@ -45,12 +45,12 @@ compare:
         ned_velocity: true
 
 initial_conditions:
-    h_ft: 10013
+    h_ft: 30013
     lat_deg: 36.019167
     long_deg: -75.674444
 
-    u_n_fps: 400
-    v_n_fps: 400
+    u_n_fps: 1414.213562
+    v_n_fps: 1414.213562
     w_n_fps: 0
 
     p_dps: 0
@@ -63,10 +63,11 @@ initial_conditions:
     dela_ach_deg: -0.00022
     dele_ach_deg: -0.73965
     delr_ach_deg: 0.0001635
-    delt_ach_pct: 10.47
+    delt_ach_pct: 50
 
 control:
     sas: true
     speedbrake: false
     ap: false
     circumnavigator: false
+    type: "no_lag"

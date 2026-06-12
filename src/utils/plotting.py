@@ -238,6 +238,7 @@ class SimulatorPlotter:
         if show: plt.show(block=False)
 
     def plot_controls(self, filename="controls", show=False, error=False):
+        has_plotted = False
         fig, axes = self._setup_figure("Actuation & Controls", 2, 2, (12, 8), error)
         
         ach_keys = ['dela_ach', 'dele_ach', 'delr_ach', 'delt_ach']
@@ -252,20 +253,30 @@ class SimulatorPlotter:
             for ds_idx, ds in enumerate(self.datasets):
                 if error and ds_idx == 0:
                     continue # Skip base
-                    
+                
                 color = self.colors[ds_idx]
+                ach_val = ds[ach_k]
+                cmd_val = ds[cmd_k]
+
+                # Plot Achieved (Solid, Dataset Color) - Only if data exists and is not all NaN
+                if ach_val is not None and not np.all(np.isnan(ach_val)):
+                    ax.plot(ds['t'], ach_val, color=color, linewidth=1.5, label=f"{ds['name']} (Ach)")
+                    has_plotted = True
                 
-                # Plot Achieved (Solid, Dataset Color)
-                ax.plot(ds['t'], ds[ach_k], color=color, linewidth=1.5, label=f"{ds['name']} (Ach)")
-                
-                # Plot Command (Dashed, White)
-                if cmd_k and ds[cmd_k] is not None:
+                # Plot Command (Dashed, White) - Only if data exists and is not all NaN
+                if cmd_val is not None and not np.all(np.isnan(cmd_val)):
                     ax.plot(ds['t'], ds[cmd_k], color='white', linewidth=1.2, linestyle='--', alpha=0.7, label=f"{ds['name']} (Cmd)")
+                    has_plotted = True
             
             self._format_ax(ax, labels[i], is_error=error)
             handles, labels_leg = ax.get_legend_handles_labels()
             if handles: ax.legend(handles, labels_leg, loc='best', facecolor='#1E1E1E', edgecolor='#404040', labelcolor='#B0B0B0', fontsize=8)
-            
+        
+        # Output suppression logic
+        if not has_plotted:
+            plt.close(fig)
+            return
+        
         plt.tight_layout()
         if self.save:
             name_suffix = "_error" if error else ""
@@ -302,7 +313,7 @@ class SimulatorPlotter:
         # Ground Track Plot
         ax_track = ax_flat[3]
         self._plot_gradient_track(ax_track, 'lon', 'lat')
-        self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]', equal_aspect=True, min_range=1e-5, is_error=error)
+        self._format_ax(ax_track, 'Latitude [deg]', 'Longitude [deg]', equal_aspect=True, min_range=1e-5)
         
         plt.tight_layout()
         if self.save:

@@ -181,8 +181,6 @@ def parse_csvs(file_paths, dt=0.01, wind_model=None):
         time_sample = ds['t']
         data_sample = ds['data']
         
-        # for ii in range(n_time_bps):
-        #     interpolated_data[ii] = fastInterp1(time_sample, data_sample, t_common[ii])
         interpolated_data = np.interp(t_common, time_sample, data_sample)
         
         sim_data_kwargs[ds['attr_name']] = interpolated_data
@@ -195,10 +193,6 @@ def parse_csvs(file_paths, dt=0.01, wind_model=None):
         sim_data_kwargs['W_N_mps'] = w_n
         sim_data_kwargs['W_E_mps'] = w_e
         sim_data_kwargs['W_D_mps'] = w_d
-    
-    # sim_data_kwargs['W_N_mps'] = np.zeros(n_time_bps)
-    # sim_data_kwargs['W_E_mps'] = np.full(n_time_bps, 20 * FT2M)
-    # sim_data_kwargs['W_D_mps'] = np.zeros(n_time_bps)
 
     return SimData(**sim_data_kwargs)
 

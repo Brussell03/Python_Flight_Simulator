@@ -149,9 +149,6 @@ class DAVEVehicle(Vehicle):
             # Autopilot command inputs
             self.equiv_airspeed_cmd_ref = self.get_var_def(self.gnc_sys, "keasCmd")
             self.alt_cmd_ref = self.get_var_def(self.gnc_sys, "altCmd")
-            self.trimmed_alpha_ref = self.get_var_def(self.gnc_sys, "trimmedAlpha")
-            self.trimmed_theta_ref = self.get_var_def(self.gnc_sys, "trimmedTheta")
-            self.trimmed_keas_ref = self.get_var_def(self.gnc_sys, "trimmedKEAS")
             
             # Sensor feedbacks for SAS and AP
             self.alt_ref = self.get_var_def(self.gnc_sys, "altMsl")
@@ -179,10 +176,10 @@ class DAVEVehicle(Vehicle):
         # 5. Actuators
         # ==========================================
         # Actuation Time Constants (First-order lag)
-        self.tau_a_s = 0.1
-        self.tau_e_s = 0.1
-        self.tau_r_s = 0.1
-        self.tau_t_s = 1
+        self.tau_a_s = 0.02
+        self.tau_e_s = 0.02
+        self.tau_r_s = 0.02
+        self.tau_t_s = 0.2
         
         # Actuation Position Limits [min_rad, max_rad]
         self.lim_a_pos_rad = np.array([-21.5, 21.5]) * D2R
@@ -191,9 +188,9 @@ class DAVEVehicle(Vehicle):
         self.lim_t_pos_pct = [0.0, 100.0]
         
         # Actuation Rate Limits [rad/s]
-        self.lim_a_rate_rps = 50.0 * D2R
-        self.lim_e_rate_rps = 50.0 * D2R
-        self.lim_r_rate_rps = 50.0 * D2R
+        self.lim_a_rate_rps = 80.0 * D2R
+        self.lim_e_rate_rps = 80.0 * D2R
+        self.lim_r_rate_rps = 80.0 * D2R
         self.lim_t_rate_pctps = 100.0
         
         # # --- Time History Data ---
@@ -341,7 +338,7 @@ class DAVEVehicle(Vehicle):
             return 0, 0, 0, 0
         return trim_list[-4:]
     
-    def set_gnc_inputs(self, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
+    def set_gnc_inputs(self, cmod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return
         
@@ -382,6 +379,7 @@ class DAVEVehicle(Vehicle):
             self.set_var_val(self.beta_gnc_def, beta_rad)
             self.set_var_val(self.phi_ref, phi_rad)
             self.set_var_val(self.theta_ref, theta_rad)
+            # print(theta_rad * R2D)
             self.set_var_val(self.psi_ref, psi_rad)
             self.set_var_val(self.p_b_gnc_ref, p_b_rps)
             self.set_var_val(self.q_b_gnc_ref, q_b_rps)
@@ -392,28 +390,31 @@ class DAVEVehicle(Vehicle):
         else:
             self.set_var_val(self.circumnavigator_toggle_ref, 0) # circle equator/Int'l date line intersection
         
+        # # Scale throttle to [0, 1] from 0 - 100%
+        # # throttle_trim_norm = delt_trim_pct / 100.0
+        # throttle_trim_norm = 10.45 / 100.0
+        # self.set_var_val(self.delt_trim_ref, throttle_trim_norm)
+        
+        # # Normalize pitch stick trim to perfectly invert the XML's elevator gearing
+        # # XML formula: el = -25.0 * totLongStk
+        # # pitch_stick_trim_norm = max(min(dele_trim_rad*R2D / -25.0, 1.0), -1.0)
+        # pitch_stick_trim_norm = max(min(-0.73965 / -25.0, 1.0), -1.0)
+        # self.set_var_val(self.pitch_stick_trim_ref, pitch_stick_trim_norm)
+        
         # --- Trimmed Values of Longitudinal Controls ---
         if x_trim_ref is not None:
             dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct = self.get_control_trim_values(x_trim_ref)
             
             # Scale throttle to [0, 1] from 0 - 100%
-            throttle_trim_norm = delt_trim_pct / 100.0
+            # throttle_trim_norm = delt_trim_pct / 100.0
+            throttle_trim_norm = 10 / 100.0
             self.set_var_val(self.delt_trim_ref, throttle_trim_norm)
             
             # Normalize pitch stick trim to perfectly invert the XML's elevator gearing
             # XML formula: el = -25.0 * totLongStk
-            pitch_stick_trim_norm = max(min(dele_trim_rad*R2D / -25.0, 1.0), -1.0)
+            # pitch_stick_trim_norm = max(min(dele_trim_rad*R2D / -25.0, 1.0), -1.0)
+            pitch_stick_trim_norm = max(min(-0.74 / -25.0, 1.0), -1.0)
             self.set_var_val(self.pitch_stick_trim_ref, pitch_stick_trim_norm)
-            
-            # --- OVERWRITE HARDCODED LQR SETPOINTS WITH TRIM STATE ---
-            alpha_trim_rad = math.atan2(x_trim_ref[2], x_trim_ref[0])
-            theta_trim_rad = x_trim_ref[7]
-            V_T_trim_mps = math.sqrt(x_trim_ref[0]**2 + x_trim_ref[1]**2 + x_trim_ref[2]**2)
-            rho_trim_kgpm3 = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], x_trim_ref[11])
-            keas_trim_mps = V_T_trim_mps * math.sqrt(rho_trim_kgpm3 / rho_0)
-            self.set_var_val(self.trimmed_alpha_ref, alpha_trim_rad)
-            self.set_var_val(self.trimmed_theta_ref, theta_trim_rad)
-            self.set_var_val(self.trimmed_keas_ref, keas_trim_mps)
         else:
             # Fallback if no trim vector is provided
             self.set_var_val(self.delt_trim_ref, 0.0)
@@ -429,24 +430,21 @@ class DAVEVehicle(Vehicle):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct
         
-        # dela_dynamic_rad = self.get_si_val(self.dela_ref)
-        # dele_cmd_rad = self.get_si_val(self.dele_ref)
-        # delr_dynamic_rad = self.get_si_val(self.delr_ref)
-        # delt_cmd_pct = self.get_si_val(self.delt_out_ref)
-        
         p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
         
-        dela_dynamic_rad = self.roll_control(t, p_b_rps, r_b_rps, cmod, dela_trim_rad)
-        dele_dynamic_rad = self.pitch_control(t, q_b_rps, cmod, dele_trim_rad)
-        delr_dynamic_rad = self.yaw_control(t, r_b_rps, cmod, delr_trim_rad)
-        delt_dynamic_pct = self.throttle_control(t, cmod, delt_trim_pct)
+        dela_dynamic_rad = self.roll_control(t, p_b_rps, r_b_rps, cmod)
+        dele_dynamic_rad = self.pitch_control(t, q_b_rps, cmod)
+        delr_dynamic_rad = self.yaw_control(t, r_b_rps, cmod)
+        delt_dynamic_pct = self.throttle_control(t, cmod)
         
-        dela_cmd_rad = dela_trim_rad + dela_dynamic_rad
-        dele_cmd_rad = dele_trim_rad + dele_dynamic_rad
-        delr_cmd_rad = delr_trim_rad + delr_dynamic_rad
-        delt_cmd_pct = delt_trim_pct + delt_dynamic_pct
+        # dela_cmd_rad = dela_trim_rad + dela_dynamic_rad
+        # dele_cmd_rad = dele_trim_rad + dele_dynamic_rad
+        # delr_cmd_rad = delr_trim_rad + delr_dynamic_rad
+        # delt_cmd_pct = delt_trim_pct + delt_dynamic_pct
+        # delt_cmd_pct = delt_dynamic_pct
         
-        return dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
+        # return dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
+        return dela_dynamic_rad, dele_dynamic_rad, delr_dynamic_rad, delt_dynamic_pct
     
     def actuator_kinematics(self, cmd_deg, ach_deg, tau_s, pos_lims, rate_lim_dps, dt=None):
         """
@@ -484,33 +482,31 @@ class DAVEVehicle(Vehicle):
     def throttle_kinematics(self, delt_cmd_pct, delt_ach_pct):
         return self.actuator_kinematics(delt_cmd_pct, delt_ach_pct, self.tau_t_s, self.lim_t_pos_pct, self.lim_t_rate_pctps)
     
-    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod, dela_trim_rad):
+    def roll_control(self, t_s, p_b_rps, r_b_rps, cmod):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return 0
         
-        dela_dynamic_rad = self.get_si_val(self.dela_ref)
-        return dela_dynamic_rad
+        dela_cmd_rad = self.get_si_val(self.dela_ref)
+        return dela_cmd_rad
     
-    def pitch_control(self, t_s, q_b_rps, cmod, dele_trim_rad):
+    def pitch_control(self, t_s, q_b_rps, cmod):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return 0
         
         dele_cmd_rad = self.get_si_val(self.dele_ref, log=False)
-        dele_dynamic_rad = dele_cmd_rad - dele_trim_rad
-        return dele_dynamic_rad
+        return dele_cmd_rad
 
     # Yaw control via rudder
-    def yaw_control(self, t_s, r_b_rps, cmod, delr_trim_rad):
+    def yaw_control(self, t_s, r_b_rps, cmod):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return 0
         
-        delr_dynamic_rad = self.get_si_val(self.delr_ref)
-        return delr_dynamic_rad
+        delr_cmd_rad = self.get_si_val(self.delr_ref)
+        return delr_cmd_rad
     
-    def throttle_control(self, t_s, cmod, delt_trim_pct):
+    def throttle_control(self, t_s, cmod):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return 0
         
         delt_cmd_pct = self.get_si_val(self.delt_out_ref)
-        delt_dynamic_pct = delt_cmd_pct - delt_trim_pct
-        return delt_dynamic_pct
+        return delt_cmd_pct

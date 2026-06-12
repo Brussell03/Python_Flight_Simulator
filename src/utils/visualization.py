@@ -78,6 +78,12 @@ if __name__ == '__main__':
     fdm_conn.start()
 
     nt_s = sim_data['t_s'].size
+    
+    # Configuration
+    time_warp = 1.0  # 1.0 = Real-time, 2.0 = 2x speed, 0.5 = Half-speed
+    t_start_wall = time.time()
+    t_start_sim = sim_data['t_s'][0]
+    
     i = 0
     while i < nt_s:
         
@@ -114,7 +120,21 @@ if __name__ == '__main__':
             lat_rad_parent, long_rad_parent, dela_rad_parent, dele_rad_parent, delr_rad_parent, \
             v_north_ft_per_s_parent, v_east_ft_per_s_parent, v_down_ft_per_s_parent))
         
+        # 2. Sync to Real-Time
+        if i < nt_s - 1:
+            # How much sim-time has passed from start to next frame
+            sim_time_delta = sim_data['t_s'][i+1] - t_start_sim
+            
+            # The wall-clock time we SHOULD be at
+            target_wall_time = t_start_wall + (sim_time_delta / time_warp)
+            
+            # Calculate how long to sleep
+            sleep_time = target_wall_time - time.time()
+            
+            # Only sleep if we are ahead of schedule
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+        
         i += 1
-        time.sleep(0.007) # Target roughly 140hz replay sync
     
     print('\nVisualization completed.')
