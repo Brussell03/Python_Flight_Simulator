@@ -3,20 +3,21 @@ import numpy as np
 import math
 from scipy.optimize import minimize
 
-from src.utils.constants import D2R, NUM_AUX, NUM_STATE, R2D
+from src.engine.state_mapping import AuxIdx, AuxIdxSlices, StateIdx, StateIdxSlices, TrimStateIdx, TrimStateIdxSlices
+from src.utils.constants import D2R, R2D
 from src.utils.interpolators import fastInterp1
 from src.utils.kinematics import dcm_to_quat, quat_to_dcm
 
-def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
+def trim_solver(eom, tmod, x):
     """
-    Finds the trimmed flight state by minimizing angular accelerations subject to kinematic constraints.
+    Finds the trimmed flight state by minimizing linear and angular accelerations subject to kinematic constraints.
     """
     
     # Helper Function to Resolve Air-Relative States
     def get_air_relative(x_trim):
-        u_b_mps, v_b_mps, w_b_mps = x_trim[0:3]
-        phi_rad, theta_rad, psi_rad = x_trim[6:9]
-        h_m = x_trim[11]
+        u_b_mps, v_b_mps, w_b_mps = x_trim[TrimStateIdxSlices.VEL_SLICE]
+        phi_rad, theta_rad, psi_rad = x_trim[TrimStateIdxSlices.ANGLE_SLICE]
+        h_m = x_trim[TrimStateIdx.H_M]
         
         W_N, W_E, W_D = eom.wind_model.get_velocity(h_m)
         
@@ -45,18 +46,21 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
     
     # Helper Function to get local effective gravity vector
     def get_local_gravity(x_trim):
-            lat_rad, long_rad, h_m = x_trim[9:12]
-            x_e, y_e, z_e = eom.earth_model.wgs84_to_cartesian(lat_rad, long_rad, h_m)
+            lat_rad, long_rad, h_m = x_trim[TrimStateIdxSlices.POS_SLICE]
+            x_e_m, y_e_m, z_e_m = eom.earth_model.geodetic_to_ecef(lat_rad, long_rad, h_m)
             
-            g_vec = eom.earth_model.get_gravity_ecef(x_e, y_e, z_e)
+            g_vec = eom.earth_model.get_gravity_ecef(x_e_m, y_e_m, z_e_m)
             return np.linalg.norm(g_vec)
 
     # Define Internal Optimizer Functions
-    def cost_function(x_trim, vehicle, cmod):
+    def cost_function(x_trim):
         # Unpack optimizer state
-        u, v, w = x_trim[0:3]
-        p, q, r = x_trim[3:6]
-        phi_rad, theta_rad, psi_rad = x_trim[6:9]
+        u, v, w = x_trim[TrimStateIdxSlices.VEL_SLICE]
+        p, q, r = x_trim[TrimStateIdxSlices.ROT_SLICE]
+        phi_rad, theta_rad, psi_rad = x_trim[TrimStateIdxSlices.ANGLE_SLICE]
+        lat_rad, long_rad, h_m = x_trim[TrimStateIdxSlices.POS_SLICE]
+        dela, dele, delr, delt = x_trim[TrimStateIdxSlices.ACT_TRIM_SLICE]
+        m_fuel = x_trim[TrimStateIdx.M_FUEL_KG]
 
         # 1. Build the Body-to-NED DCM
         cphi, sphi = math.cos(phi_rad), math.sin(phi_rad)
@@ -70,8 +74,7 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
         ])
 
         # Geodetic to ECEF Conversion for EOM Compliance
-        lat_rad, long_rad, h_m = x_trim[9:12]
-        x_e, y_e, z_e = eom.earth_model.geodetic_to_ecef(lat_rad, long_rad, h_m)
+        x_e_m, y_e_m, z_e_m = eom.earth_model.geodetic_to_ecef(lat_rad, long_rad, h_m)
 
         # 2. Build the local ECEF-to-NED DCM to resolve the true orientation wrt ECEF
         sin_lat, cos_lat = math.sin(lat_rad), math.cos(lat_rad)
@@ -87,32 +90,46 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
         C_b2e = C_e2n.T @ C_b2n
         q0, q1, q2, q3 = dcm_to_quat(C_b2e)
 
-        x_full = np.array([
-            u, v, w, p, q, r, q0, q1, q2, q3, 
-            x_e, y_e, z_e, 
-            x_trim[12], x_trim[13], x_trim[14], x_trim[15], x_trim[16]
-        ], dtype=float)
+        x_full = np.zeros(len(StateIdx))
+        x_full[StateIdx.U_B_MPS]      = u
+        x_full[StateIdx.V_B_MPS]      = v
+        x_full[StateIdx.W_B_MPS]      = w
+        x_full[StateIdx.P_B_RPS]      = p
+        x_full[StateIdx.Q_B_RPS]      = q
+        x_full[StateIdx.R_B_RPS]      = r
+        x_full[StateIdx.Q0]           = q0
+        x_full[StateIdx.Q1]           = q1
+        x_full[StateIdx.Q2]           = q2
+        x_full[StateIdx.Q3]           = q3
+        x_full[StateIdx.X_E_M]        = x_e_m
+        x_full[StateIdx.Y_E_M]        = y_e_m
+        x_full[StateIdx.Z_E_M]        = z_e_m
+        x_full[StateIdx.M_FUEL_KG]    = m_fuel
+        x_full[StateIdx.DELA_ACH_RAD] = dela
+        x_full[StateIdx.DELE_ACH_RAD] = dele
+        x_full[StateIdx.DELR_ACH_RAD] = delr
+        x_full[StateIdx.DELT_ACH_PCT] = delt
         
-        dx = np.empty((NUM_STATE,), dtype=float)
-        auxillary_data = np.empty((NUM_AUX,), dtype=float)
+        dx = np.empty((len(StateIdx),), dtype=float)
+        auxillary_data = np.empty((len(AuxIdx),), dtype=float)
         
         # Call the EOM
-        dx, auxillary_data = eom.solve_eom(0, x_full, dx, auxillary_data, None, vehicle, cmod)
+        dx, auxillary_data = eom.solve_eom(0, x_full, dx, auxillary_data, None)
         
         # Scale angular accelerations to degree-like magnitudes to maintain optimization gradients
         W_rot = R2D**2
         
         if tmod["trim_mode"] in ['steady_glide', 'straight_and_level']:
-            cost = dx[0]**2 + dx[1]**2 + dx[2]**2 + W_rot*(dx[3]**2 + dx[4]**2 + dx[5]**2)
+            cost = dx[StateIdx.U_B_MPS]**2 + dx[StateIdx.V_B_MPS]**2 + dx[StateIdx.W_B_MPS]**2 + W_rot*(dx[StateIdx.P_B_RPS]**2 + dx[StateIdx.Q_B_RPS]**2 + dx[StateIdx.R_B_RPS]**2)
         elif tmod["trim_mode"] == 'moment_equilibrium':
-            cost = W_rot*(dx[3]**2 + dx[4]**2 + dx[5]**2)
+            cost = W_rot*(dx[StateIdx.P_B_RPS]**2 + dx[StateIdx.Q_B_RPS]**2 + dx[StateIdx.R_B_RPS]**2)
         elif tmod["trim_mode"] == 'descending_turn':
-            p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[4], auxillary_data[5], auxillary_data[6]
+            p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[AuxIdxSlices.NAV_RATE_SLICE] # auxillary_data[4], auxillary_data[5], auxillary_data[6]
             psidot_current = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
             # psidot_current = (q * math.sin(phi_rad) + r * math.cos(phi_rad)) / math.cos(theta_rad)
-            cost = 0*dx[0]**2 + dx[1]**2 + 0*dx[2]**2 + W_rot*(dx[3]**2 + dx[4]**2 + dx[5]**2) + 1e1*(psidot_current-psidot_target_rps)**2
+            cost = 0*dx[StateIdx.U_B_MPS]**2 + dx[StateIdx.V_B_MPS]**2 + 0*dx[StateIdx.W_B_MPS]**2 + W_rot*(dx[StateIdx.P_B_RPS]**2 + dx[StateIdx.Q_B_RPS]**2 + dx[StateIdx.R_B_RPS]**2) + 1e1*(psidot_current-psidot_target_rps)**2
         else:
-            cost = W_rot*(dx[3]**2 + dx[4]**2 + dx[5]**2) # Fallback
+            cost = W_rot*(dx[StateIdx.P_B_RPS]**2 + dx[StateIdx.Q_B_RPS]**2 + dx[StateIdx.R_B_RPS]**2) # Fallback
             
         return cost
 
@@ -129,29 +146,28 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
             _, _, beta_air_rad = get_air_relative(x_trim)
             return beta_air_rad - beta_target_rad
         
-        def roll_rate_constraint(x_trim): return x_trim[3] - p_target_rps
-        def pitch_rate_constraint(x_trim): return x_trim[4] - q_target_rps
-        def yaw_rate_constraint(x_trim): return x_trim[5] - r_target_rps
+        def roll_rate_constraint(x_trim): return x_trim[TrimStateIdx.P_B_RPS] - p_target_rps
+        def pitch_rate_constraint(x_trim): return x_trim[TrimStateIdx.Q_B_RPS] - q_target_rps
+        def yaw_rate_constraint(x_trim): return x_trim[TrimStateIdx.R_B_RPS] - r_target_rps
         
-        def roll_constraint(x_trim): return x_trim[6] - phi_target_rad
-        def pitch_constraint(x_trim): return x_trim[7] - theta_target_rad
-        def heading_constraint(x_trim): return x_trim[8] - psi_target_rad
+        def roll_constraint(x_trim): return x_trim[TrimStateIdx.PHI_RAD] - phi_target_rad
+        def pitch_constraint(x_trim): return x_trim[TrimStateIdx.THETA_RAD] - theta_target_rad
+        def heading_constraint(x_trim): return x_trim[TrimStateIdx.PSI_RAD] - psi_target_rad
         
-        def latitude_constraint(x_trim): return x_trim[9] - lat_target_rad
-        def longitude_constraint(x_trim): return x_trim[10] - long_target_rad
-        def altitude_constraint(x_trim): return x_trim[11] - h_target_m
+        def latitude_constraint(x_trim): return x_trim[TrimStateIdx.LAT_RAD] - lat_target_rad
+        def longitude_constraint(x_trim): return x_trim[TrimStateIdx.LONG_RAD] - long_target_rad
+        def altitude_constraint(x_trim): return x_trim[TrimStateIdx.H_M] - h_target_m
         
-        def position_constraint(x_trim): return x_trim[9] - lat_target_rad + x_trim[10] - long_target_rad + x_trim[11] - h_target_m
-        def mass_constraint(x_trim): return x_trim[12] - m_fuel_target_kg
+        def position_constraint(x_trim): return x_trim[TrimStateIdx.LAT_RAD] - lat_target_rad + x_trim[TrimStateIdx.LONG_RAD] - long_target_rad + x_trim[TrimStateIdx.H_M] - h_target_m
+        def mass_constraint(x_trim): return x_trim[TrimStateIdx.M_FUEL_KG] - m_fuel_target_kg
         
         def flight_path_angle_constraint(x_trim):
             _, alpha_air_rad, _ = get_air_relative(x_trim)
-            gamma_current_rad = x_trim[7] - alpha_air_rad
+            gamma_current_rad = x_trim[TrimStateIdx.THETA_RAD] - alpha_air_rad
             return gamma_current_rad - gamma_target_rad
         
         def theta_rate_of_climb_constraint(x_trim):
             V_T_current_mps, alpha_current_rad, beta_current_rad = get_air_relative(x_trim)
-            # gamma_current_rad = x_trim[7] - alpha_current_rad
             
             g_local_mps2 = get_local_gravity(x_trim)
             
@@ -184,11 +200,10 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
             numerator = a*b+math.sin(gamma_target_rad)*math.sqrt(sqrt_term_inside)
             denominator = a**2-math.sin(gamma_target_rad)**2
             theta_target_rad = math.atan(numerator/denominator)
-            return x_trim[7] - theta_target_rad
+            return x_trim[TrimStateIdx.THETA_RAD] - theta_target_rad
         
         def phi_turn_coord_constraint(x_trim):
             V_T_current_mps, alpha_current_rad, beta_current_rad = get_air_relative(x_trim)
-            # gamma_current_rad = x_trim[7] - alpha_current_rad
             
             g_local = get_local_gravity(x_trim)
             
@@ -207,7 +222,7 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
                 ((a - b**2) + b*math.tan(alpha_current_rad)*math.sqrt(sqrt_term_phi)) / \
                 (a**2 - b**2*(1 + c*math.tan(alpha_current_rad)**2))
             phi_target_rad = math.atan(tan_phi_target_rad)
-            return x_trim[6] - phi_target_rad
+            return x_trim[TrimStateIdx.PHI_RAD] - phi_target_rad
 
         if tmod["trim_mode"] == 'steady_glide':
             return [
@@ -265,15 +280,15 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
     # Setup and Execution
     print("--- Unpowered Trim Solver ---")
     
-    cmod['trim_flag'] = cmod.get('trim_flag', False) # Defaults to off if missing
-    cmod['linearization_flag'] = cmod.get('linearization_flag', False)
+    eom.control_model['trim_flag'] = eom.control_model.get('trim_flag', False) # Defaults to off if missing
+    eom.control_model['linearization_flag'] = eom.control_model.get('linearization_flag', False)
     
     # Extract initial guesses from the passed configuration vectors
-    lat_current_rad, long_current_rad, h_current_m = eom.earth_model.ecef_to_geodetic(x[10], x[11], x[12])
+    lat_current_rad, long_current_rad, h_current_m = eom.earth_model.ecef_to_geodetic(x[StateIdx.X_E_M], x[StateIdx.Y_E_M], x[StateIdx.Z_E_M])
     h_target_m = tmod.get('h_m', h_current_m)
     
-    Cs_mps = fastInterp1(amod["alt_m"], amod["c_mps"], h_current_m)
-    c_snd = fastInterp1(amod['alt_m'], amod['c_mps'], h_target_m)
+    Cs_mps = fastInterp1(eom.atmo_model["alt_m"], eom.atmo_model["c_mps"], h_current_m)
+    c_snd = fastInterp1(eom.atmo_model['alt_m'], eom.atmo_model['c_mps'], h_target_m)
     
     sin_lat, cos_lat = math.sin(lat_current_rad), math.cos(lat_current_rad)
     sin_lon, cos_lon = math.sin(long_current_rad), math.cos(long_current_rad)
@@ -284,7 +299,7 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
         [-cos_lat * cos_lon, -cos_lat * sin_lon, -sin_lat]
     ])
     
-    q0, q1, q2, q3 = x[6], x[7], x[8], x[9]
+    q0, q1, q2, q3 = x[StateIdxSlices.QUAT_SLICE]
     C_b2e = quat_to_dcm(q0, q1, q2, q3)
     C_e2b = C_b2e.T
     C_n2b = C_e2b @ C_e2n.T
@@ -298,9 +313,9 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
     theta_current_rad = np.arcsin(np.clip(-C_b2n[2, 0], -1.0, 1.0))
     psi_current_rad   = np.arctan2(C_b2n[1, 0], C_b2n[0, 0])
     
-    u_air_b_mps = x[0] - W_b_mps[0]
-    v_air_b_mps = x[1] - W_b_mps[1]
-    w_air_b_mps = x[2] - W_b_mps[2]
+    u_air_b_mps = x[StateIdx.U_B_MPS] - W_b_mps[0]
+    v_air_b_mps = x[StateIdx.V_B_MPS] - W_b_mps[1]
+    w_air_b_mps = x[StateIdx.W_B_MPS] - W_b_mps[2]
     
     V_T_current_mps = np.sqrt(u_air_b_mps**2 + v_air_b_mps**2 + w_air_b_mps**2)
     alpha_current_rad = np.arctan2(w_air_b_mps, u_air_b_mps)
@@ -310,19 +325,19 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
     V_T_target_mps   = tmod.get('Mach', Mach_current) * c_snd
     alpha_target_rad = tmod['alpha_deg'] * D2R if tmod.get('alpha_deg') is not None else alpha_current_rad
     beta_target_rad  = tmod['beta_deg'] * D2R if tmod.get('beta_deg') is not None else beta_current_rad
-    p_target_rps     = tmod['p_rps'] if tmod.get('p_rps') is not None else x[3]
-    q_target_rps     = tmod['q_rps'] if tmod.get('q_rps') is not None else x[4]
-    r_target_rps     = tmod['r_rps'] if tmod.get('r_rps') is not None else x[5]
+    p_target_rps     = tmod['p_rps'] if tmod.get('p_rps') is not None else x[StateIdx.P_B_RPS]
+    q_target_rps     = tmod['q_rps'] if tmod.get('q_rps') is not None else x[StateIdx.Q_B_RPS]
+    r_target_rps     = tmod['r_rps'] if tmod.get('r_rps') is not None else x[StateIdx.R_B_RPS]
     phi_target_rad   = tmod['phi_deg'] * D2R if tmod.get('phi_deg') is not None else phi_current_rad
     theta_target_rad = tmod['theta_deg'] * D2R if tmod.get('theta_deg') is not None else theta_current_rad
     psi_target_rad   = tmod['psi_deg'] * D2R if tmod.get('psi_deg') is not None else psi_current_rad
     lat_target_rad   = tmod['lat_deg'] * D2R if tmod.get('lat_deg') is not None else lat_current_rad
     long_target_rad  = tmod['long_deg'] * D2R if tmod.get('long_deg') is not None else long_current_rad
-    m_fuel_target_kg = tmod.get('m_fuel_kg', x[13])
-    dela_target_rad  = tmod['dela_ach_deg'] * D2R if tmod.get('dela_ach_deg') is not None else x[14]
-    dele_target_rad  = tmod['dele_ach_deg'] * D2R if tmod.get('dele_ach_deg') is not None else x[15]
-    delr_target_rad  = tmod['delr_ach_deg'] * D2R if tmod.get('delr_ach_deg') is not None else x[16]
-    delt_target_pct  = tmod['delt_ach_pct'] if tmod.get('delt_ach_pct') is not None else x[17]
+    m_fuel_target_kg = tmod.get('m_fuel_kg', x[StateIdx.M_FUEL_KG])
+    dela_target_rad  = tmod['dela_ach_deg'] * D2R if tmod.get('dela_ach_deg') is not None else x[StateIdx.DELA_ACH_RAD]
+    dele_target_rad  = tmod['dele_ach_deg'] * D2R if tmod.get('dele_ach_deg') is not None else x[StateIdx.DELE_ACH_RAD]
+    delr_target_rad  = tmod['delr_ach_deg'] * D2R if tmod.get('delr_ach_deg') is not None else x[StateIdx.DELR_ACH_RAD]
+    delt_target_pct  = tmod['delt_ach_pct'] if tmod.get('delt_ach_pct') is not None else x[StateIdx.DELT_ACH_PCT]
     
     psidot_target_rps = tmod.get('psidot_dps', 0.0) * D2R
     
@@ -366,83 +381,82 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
     w_target_b_mps = w_target_air + W_b_tgt[2]
 
     # Use current state vector overrided by provided guess parameters
-    x_guess = np.zeros(NUM_STATE - 1)
-    x_guess[0]  = u_target_b_mps
-    x_guess[1]  = v_target_b_mps
-    x_guess[2]  = w_target_b_mps
-    x_guess[3]  = p_target_rps
-    x_guess[4]  = q_target_rps
-    x_guess[5]  = r_target_rps
-    x_guess[6]  = phi_target_rad
-    x_guess[7]  = theta_target_rad
-    x_guess[8]  = psi_target_rad
-    x_guess[9]  = lat_target_rad
-    x_guess[10] = long_target_rad
-    x_guess[11] = h_target_m
-    x_guess[12] = m_fuel_target_kg
-    x_guess[13] = dela_target_rad
-    x_guess[14] = dele_target_rad
-    x_guess[15] = delr_target_rad
-    x_guess[16] = delt_target_pct
+    x_guess = np.zeros(len(TrimStateIdx))
+    x_guess[TrimStateIdx.U_B_MPS]      = u_target_b_mps
+    x_guess[TrimStateIdx.V_B_MPS]      = v_target_b_mps
+    x_guess[TrimStateIdx.W_B_MPS]      = w_target_b_mps
+    x_guess[TrimStateIdx.P_B_RPS]      = p_target_rps
+    x_guess[TrimStateIdx.Q_B_RPS]      = q_target_rps
+    x_guess[TrimStateIdx.R_B_RPS]      = r_target_rps
+    x_guess[TrimStateIdx.PHI_RAD]      = phi_target_rad
+    x_guess[TrimStateIdx.THETA_RAD]    = theta_target_rad
+    x_guess[TrimStateIdx.PSI_RAD]      = psi_target_rad
+    x_guess[TrimStateIdx.LAT_RAD]      = lat_target_rad
+    x_guess[TrimStateIdx.LONG_RAD]     = long_target_rad
+    x_guess[TrimStateIdx.H_M]          = h_target_m
+    x_guess[TrimStateIdx.M_FUEL_KG]    = m_fuel_target_kg
+    x_guess[TrimStateIdx.DELA_TRIM_RAD] = dela_target_rad
+    x_guess[TrimStateIdx.DELE_TRIM_RAD] = dele_target_rad
+    x_guess[TrimStateIdx.DELR_TRIM_RAD] = delr_target_rad
+    x_guess[TrimStateIdx.DELT_TRIM_PCT] = delt_target_pct
     
     print("\nTrim guess state:")
-    print(f"u_b_mps:   {x_guess[0]:.8f}")
-    print(f"v_b_mps:   {x_guess[1]:.8f}")
-    print(f"w_b_mps:   {x_guess[2]:.8f}")
-    print(f"p_dps:     {x_guess[3]*R2D:.8f}")
-    print(f"q_dps:     {x_guess[4]*R2D:.8f}")
-    print(f"r_dps:     {x_guess[5]*R2D:.8f}")
-    print(f"phi_deg:   {x_guess[6]*R2D:.8f}")
-    print(f"theta_deg: {x_guess[7]*R2D:.8f}")
-    print(f"psi_deg:   {x_guess[8]*R2D:.8f}")
-    print(f"lat_deg:   {x_guess[9]*R2D:.8f}")
-    print(f"long_deg:  {x_guess[10]*R2D:.8f}")
-    print(f"alt_m:     {x_guess[11]:.8f}")
-    print(f"m_fuel_kg: {x_guess[12]:.8f}")
-    print(f"dela_deg:  {x_guess[13]*R2D:.8f}")
-    print(f"dele_deg:  {x_guess[14]*R2D:.8f}")
-    print(f"delr_deg:  {x_guess[15]*R2D:.8f}")
-    print(f"delt_pct:  {x_guess[16]:.8f}")
+    print(f"u_b_mps:   {x_guess[TrimStateIdx.U_B_MPS]:.8f}")
+    print(f"v_b_mps:   {x_guess[TrimStateIdx.V_B_MPS]:.8f}")
+    print(f"w_b_mps:   {x_guess[TrimStateIdx.W_B_MPS]:.8f}")
+    print(f"p_dps:     {x_guess[TrimStateIdx.P_B_RPS]*R2D:.8f}")
+    print(f"q_dps:     {x_guess[TrimStateIdx.Q_B_RPS]*R2D:.8f}")
+    print(f"r_dps:     {x_guess[TrimStateIdx.R_B_RPS]*R2D:.8f}")
+    print(f"phi_deg:   {x_guess[TrimStateIdx.PHI_RAD]*R2D:.8f}")
+    print(f"theta_deg: {x_guess[TrimStateIdx.THETA_RAD]*R2D:.8f}")
+    print(f"psi_deg:   {x_guess[TrimStateIdx.PSI_RAD]*R2D:.8f}")
+    print(f"lat_deg:   {x_guess[TrimStateIdx.LAT_RAD]*R2D:.8f}")
+    print(f"long_deg:  {x_guess[TrimStateIdx.LONG_RAD]*R2D:.8f}")
+    print(f"alt_m:     {x_guess[TrimStateIdx.H_M]:.8f}")
+    print(f"m_fuel_kg: {x_guess[TrimStateIdx.M_FUEL_KG]:.8f}")
+    print(f"dela_deg:  {x_guess[TrimStateIdx.DELA_TRIM_RAD]*R2D:.8f}")
+    print(f"dele_deg:  {x_guess[TrimStateIdx.DELE_TRIM_RAD]*R2D:.8f}")
+    print(f"delr_deg:  {x_guess[TrimStateIdx.DELR_TRIM_RAD]*R2D:.8f}")
+    print(f"delt_pct:  {x_guess[TrimStateIdx.DELT_TRIM_PCT]:.8f}")
     
     warnings.filterwarnings("ignore", category=RuntimeWarning, message="Values in x were outside bounds during a minimize step")
 
-    bounds = [(-np.inf, np.inf)] * (NUM_STATE - 1)
-    bounds[7]  = (-math.pi/3, math.pi/3)
+    bounds = [(-np.inf, np.inf)] * (len(TrimStateIdx))
+    bounds[TrimStateIdx.THETA_RAD]  = (-math.pi/3, math.pi/3)
     
-    bounds[9]  = (lat_target_rad, lat_target_rad)      # Lock Latitude
-    bounds[10] = (long_target_rad, long_target_rad)    # Lock Longitude
-    bounds[11] = (h_target_m, h_target_m)              # Lock Altitude
-    bounds[12] = (m_fuel_target_kg, m_fuel_target_kg)  # Lock Mass
+    bounds[TrimStateIdx.LAT_RAD]  = (lat_target_rad, lat_target_rad)      # Lock Latitude
+    bounds[TrimStateIdx.LONG_RAD] = (long_target_rad, long_target_rad)    # Lock Longitude
+    bounds[TrimStateIdx.H_M] = (h_target_m, h_target_m)                   # Lock Altitude
+    bounds[TrimStateIdx.M_FUEL_KG] = (m_fuel_target_kg, m_fuel_target_kg)  # Lock Mass
     
     # Needs to be gotten from vehicle
-    bounds[13] = (-15*D2R, 15*D2R)
-    bounds[14] = (-35*D2R, 15*D2R)
-    bounds[15] = (-7.5*D2R, 7.5*D2R)
-    bounds[16] = (0, 100)
+    bounds[TrimStateIdx.DELA_TRIM_RAD] = (-15*D2R, 15*D2R)
+    bounds[TrimStateIdx.DELE_TRIM_RAD] = (-35*D2R, 15*D2R)
+    bounds[TrimStateIdx.DELR_TRIM_RAD] = (-7.5*D2R, 7.5*D2R)
+    bounds[TrimStateIdx.DELT_TRIM_PCT] = (0, 100)
     
-    cmod["trim_flag"] = True
+    eom.control_model["trim_flag"] = True
 
     print("\nSolving for trim state...")
     result = minimize(
         fun = cost_function,
         x0 = x_guess,
-        args = (vehicle, cmod),
         method = 'SLSQP',
         bounds = bounds,
         constraints = define_trim_constraints(),
         options={'disp': True, 'ftol': 1e-9, 'maxiter': 500}
     )
     
-    cmod["trim_flag"] = False
+    eom.control_model["trim_flag"] = False
     
     # Process Results
     x_trim = result.x
-    phi_rad = x_trim[6]
-    theta_rad = x_trim[7]
-    psi_rad = x_trim[8]
-    lat_rad = x_trim[9]
-    long_rad = x_trim[10]
-    h_m = x_trim[11]
+    phi_rad = x_trim[TrimStateIdx.PHI_RAD]
+    theta_rad = x_trim[TrimStateIdx.THETA_RAD]
+    psi_rad = x_trim[TrimStateIdx.PSI_RAD]
+    lat_rad = x_trim[TrimStateIdx.LAT_RAD]
+    long_rad = x_trim[TrimStateIdx.LONG_RAD]
+    h_m = x_trim[TrimStateIdx.H_M]
     
     # Transformation for final reconstruction block
     cphi, sphi = math.cos(phi_rad), math.sin(phi_rad)
@@ -467,66 +481,70 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
     C_b2e = C_e2n.T @ C_b2n
     q0, q1, q2, q3 = dcm_to_quat(C_b2e)
     
-    dx = np.empty((NUM_STATE,), dtype=float)
-    auxillary_data = np.empty((NUM_AUX,), dtype=float)
+    dx = np.empty((len(StateIdx),), dtype=float)
+    auxillary_data = np.empty((len(AuxIdx),), dtype=float)
     
     # Construct verified ECEF array for final solve output
     x_e_m, y_e_m, z_e_m = eom.earth_model.geodetic_to_ecef(lat_rad, long_rad, h_m)
 
-    x_trim_full = np.array([
-        x_trim[0], x_trim[1], x_trim[2], x_trim[3], x_trim[4], x_trim[5],
-        q0, q1, q2, q3,
-        x_e_m, y_e_m, z_e_m,
-        x_trim[12], x_trim[13], x_trim[14], x_trim[15], x_trim[16]
-    ], dtype=float)
+    x_trim_full = np.zeros(len(StateIdx))
+    x_trim_full[StateIdx.U_B_MPS]      = x_trim[TrimStateIdx.U_B_MPS]
+    x_trim_full[StateIdx.V_B_MPS]      = x_trim[TrimStateIdx.V_B_MPS]
+    x_trim_full[StateIdx.W_B_MPS]      = x_trim[TrimStateIdx.W_B_MPS]
+    x_trim_full[StateIdx.P_B_RPS]      = x_trim[TrimStateIdx.P_B_RPS]
+    x_trim_full[StateIdx.Q_B_RPS]      = x_trim[TrimStateIdx.Q_B_RPS]
+    x_trim_full[StateIdx.R_B_RPS]      = x_trim[TrimStateIdx.R_B_RPS]
+    x_trim_full[StateIdx.Q0]           = q0
+    x_trim_full[StateIdx.Q1]           = q1
+    x_trim_full[StateIdx.Q2]           = q2
+    x_trim_full[StateIdx.Q3]           = q3
+    x_trim_full[StateIdx.X_E_M]        = x_e_m
+    x_trim_full[StateIdx.Y_E_M]        = y_e_m
+    x_trim_full[StateIdx.Z_E_M]        = z_e_m
+    x_trim_full[StateIdx.M_FUEL_KG]    = x_trim[TrimStateIdx.M_FUEL_KG]
+    x_trim_full[StateIdx.DELA_ACH_RAD] = x_trim[TrimStateIdx.DELA_TRIM_RAD]
+    x_trim_full[StateIdx.DELE_ACH_RAD] = x_trim[TrimStateIdx.DELE_TRIM_RAD]
+    x_trim_full[StateIdx.DELR_ACH_RAD] = x_trim[TrimStateIdx.DELR_TRIM_RAD]
+    x_trim_full[StateIdx.DELT_ACH_PCT] = x_trim[TrimStateIdx.DELT_TRIM_PCT]
 
-    x_trim_ref = np.array([
-        x_trim[0], x_trim[1], x_trim[2], x_trim[3], x_trim[4], x_trim[5],
-        phi_rad, theta_rad, psi_rad,
-        lat_rad, long_rad, h_m,
-        x_trim[12],
-        x_trim[13],
-        x_trim[14],
-        x_trim[15],
-        x_trim[16]
-    ], dtype=float)
+    x_trim_ref = x_trim.copy()
     
     # Wind Engine Interface
-    W_N_mps, W_E_mps, W_D_mps = wmod.get_velocity(h_m)
+    W_N_mps, W_E_mps, W_D_mps = eom.wind_model.get_velocity(h_m)
     
     W_n_mps = np.array([W_N_mps, W_E_mps, W_D_mps])
     W_b_mps = C_n2b @ W_n_mps
 
     # Air-Relative Translational States
-    u_air_b_mps = x[0] - W_b_mps[0]
-    v_air_b_mps = x[1] - W_b_mps[1]
-    w_air_b_mps = x[2] - W_b_mps[2]
+    u_air_b_mps = x[StateIdx.U_B_MPS] - W_b_mps[0]
+    v_air_b_mps = x[StateIdx.V_B_MPS] - W_b_mps[1]
+    w_air_b_mps = x[StateIdx.W_B_MPS] - W_b_mps[2]
     
-    rho_kgpm3 = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], h_m)
+    rho_kgpm3 = fastInterp1(eom.atmo_model["alt_m"], eom.atmo_model["rho_kgpm3"], h_m)
     true_airspeed_mps = math.sqrt(u_air_b_mps**2 + v_air_b_mps**2 + w_air_b_mps**2)
     
     alpha_rad = math.atan2(w_air_b_mps, u_air_b_mps)
     beta_rad = math.asin(v_air_b_mps / true_airspeed_mps) if true_airspeed_mps > 0 else 0.0
     
     # Extract the dynamic SAS commands reacting to the trimmed body rates
-    vehicle.set_gnc_inputs(cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, x[3], x[4], x[5], true_airspeed_mps, rho_kgpm3, x_trim_ref)
-    dela_dyn_rad = vehicle.roll_control(0, x_trim[3], x_trim[5], cmod, 0)
-    dele_dyn_rad = vehicle.pitch_control(0, x_trim[4], cmod, 0)
-    delr_dyn_rad = vehicle.yaw_control(0, x_trim[5], cmod, 0)
-    delt_dyn_pct = vehicle.throttle_control(0, cmod, 0)
+    eom.vehicle.set_gnc_inputs(0, eom.control_model, eom.atmo_model, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, x[StateIdx.P_B_RPS], x[StateIdx.Q_B_RPS], x[StateIdx.R_B_RPS], true_airspeed_mps, rho_kgpm3, x_trim_ref)
+    dela_dyn_rad = eom.vehicle.roll_control(0, x_trim[TrimStateIdx.P_B_RPS], x_trim[TrimStateIdx.R_B_RPS], eom.control_model)
+    dele_dyn_rad = eom.vehicle.pitch_control(0, x_trim[TrimStateIdx.Q_B_RPS], eom.control_model)
+    delr_dyn_rad = eom.vehicle.yaw_control(0, x_trim[TrimStateIdx.R_B_RPS], eom.control_model)
+    delt_dyn_pct = eom.vehicle.throttle_control(0, eom.control_model)
     
     # Subtract the SAS contribution to isolate the true baseline pilot trim
-    x_trim_ref[13] -= dela_dyn_rad
-    x_trim_ref[14] -= dele_dyn_rad
-    x_trim_ref[15] -= delr_dyn_rad
-    x_trim_ref[16] -= delt_dyn_pct
+    x_trim_ref[TrimStateIdx.DELA_TRIM_RAD] -= dela_dyn_rad
+    x_trim_ref[TrimStateIdx.DELE_TRIM_RAD] -= dele_dyn_rad
+    x_trim_ref[TrimStateIdx.DELR_TRIM_RAD] -= delr_dyn_rad
+    x_trim_ref[TrimStateIdx.DELT_TRIM_PCT] -= delt_dyn_pct
     
-    dx, auxillary_data = eom.solve_eom(0, x_trim_full, dx, auxillary_data, x_trim_ref, vehicle, cmod)
+    dx, auxillary_data = eom.solve_eom(0, x_trim_full, dx, auxillary_data, x_trim_ref)
 
     if result.success:
         
         # Calculate proper Euler Rates using kinematic equations
-        p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[4], auxillary_data[5], auxillary_data[6]
+        p_nb_rps, q_nb_rps, r_nb_rps = auxillary_data[AuxIdxSlices.NAV_RATE_SLICE]
         
         phi_rad_dot   = p_nb_rps + q_nb_rps * math.sin(phi_rad) * math.tan(theta_rad) + r_nb_rps * math.cos(phi_rad) * math.tan(theta_rad)
         theta_rad_dot = q_nb_rps * math.cos(phi_rad) - r_nb_rps * math.sin(phi_rad)
@@ -534,46 +552,46 @@ def trim_solver(eom, vehicle, amod, cmod, tmod, wmod, x):
         
         print(f"Trim Successful! Cost function value: {result.fun:.3e}")
         print("-" * 25)
-        print(f"VT_mps:    {math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2):.8f}")
-        print(f"alpha_deg: {math.atan2(x_trim[2], x_trim[0])*R2D:.8f}")
-        print(f"beta_deg:  {math.asin(x_trim[1]/math.sqrt(x_trim[0]**2 + x_trim[1]**2 + x_trim[2]**2))*R2D:.8f}")
-        print(f"p_dps:     {x_trim[3]*R2D:.8f}")
-        print(f"q_dps:     {x_trim[4]*R2D:.8f}")
-        print(f"r_dps:     {x_trim[5]*R2D:.8f}")
+        print(f"VT_mps:    {math.sqrt(x_trim[TrimStateIdx.U_B_MPS]**2 + x_trim[TrimStateIdx.V_B_MPS]**2 + x_trim[TrimStateIdx.W_B_MPS]**2):.8f}")
+        print(f"alpha_deg: {math.atan2(x_trim[TrimStateIdx.W_B_MPS], x_trim[TrimStateIdx.U_B_MPS])*R2D:.8f}")
+        print(f"beta_deg:  {math.asin(x_trim[1]/math.sqrt(x_trim[TrimStateIdx.U_B_MPS]**2 + x_trim[TrimStateIdx.V_B_MPS]**2 + x_trim[TrimStateIdx.W_B_MPS]**2))*R2D:.8f}")
+        print(f"p_dps:     {x_trim[TrimStateIdx.P_B_RPS]*R2D:.8f}")
+        print(f"q_dps:     {x_trim[TrimStateIdx.Q_B_RPS]*R2D:.8f}")
+        print(f"r_dps:     {x_trim[TrimStateIdx.R_B_RPS]*R2D:.8f}")
         print(f"phi_deg:   {phi_rad*R2D:.8f}")
         print(f"theta_deg: {theta_rad*R2D:.8f}")
         print(f"psi_deg:   {psi_rad*R2D:.8f}")
-        print(f"lat_deg:   {x_trim[9]*R2D:.8f}")
-        print(f"long_deg:  {x_trim[10]*R2D:.8f}")
-        print(f"alt_m:     {x_trim[11]:.8f}")
-        print(f"m_fuel_kg: {x_trim[12]:.8f}")
-        print(f"dela_deg:  {x_trim[13]*R2D:.8f}")
-        print(f"dele_deg:  {x_trim[14]*R2D:.8f}")
-        print(f"delr_deg:  {x_trim[15]*R2D:.8f}")
-        print(f"delt_pct:  {x_trim[16]:.8f}")
+        print(f"lat_deg:   {x_trim[TrimStateIdx.LAT_RAD]*R2D:.8f}")
+        print(f"long_deg:  {x_trim[TrimStateIdx.LONG_RAD]*R2D:.8f}")
+        print(f"alt_m:     {x_trim[TrimStateIdx.H_M]:.8f}")
+        print(f"m_fuel_kg: {x_trim[TrimStateIdx.M_FUEL_KG]:.8f}")
+        print(f"dela_deg:  {x_trim[TrimStateIdx.DELA_TRIM_RAD]*R2D:.8f}")
+        print(f"dele_deg:  {x_trim[TrimStateIdx.DELE_TRIM_RAD]*R2D:.8f}")
+        print(f"delr_deg:  {x_trim[TrimStateIdx.DELR_TRIM_RAD]*R2D:.8f}")
+        print(f"delt_pct:  {x_trim[TrimStateIdx.DELT_TRIM_PCT]:.8f}")
         print(" ")
-        print(f"u_b_mps-dot:      {dx[0]: .8f}")
-        print(f"v_b_mps-dot:      {dx[1]: .8f}")
-        print(f"w_b_mps-dot:      {dx[2]: .8f}")
-        print(f"p_b_dps-dot:      {dx[3]*R2D: .8f}")
-        print(f"q_b_dps-dot:      {dx[4]*R2D: .8f}")
-        print(f"r_b_dps-dot:      {dx[5]*R2D: .8f}")
+        print(f"u_b_mps-dot:      {dx[StateIdx.U_B_MPS]: .8f}")
+        print(f"v_b_mps-dot:      {dx[StateIdx.V_B_MPS]: .8f}")
+        print(f"w_b_mps-dot:      {dx[StateIdx.W_B_MPS]: .8f}")
+        print(f"p_b_dps-dot:      {dx[StateIdx.P_B_RPS]*R2D: .8f}")
+        print(f"q_b_dps-dot:      {dx[StateIdx.Q_B_RPS]*R2D: .8f}")
+        print(f"r_b_dps-dot:      {dx[StateIdx.R_B_RPS]*R2D: .8f}")
         print(f"phi_deg-dot:      {phi_rad_dot*R2D: .8f}")
         print(f"theta_deg-dot:    {theta_rad_dot*R2D: .8f}")
         print(f"psi_deg-dot:      {psi_rad_dot*R2D: .8f}")
-        print(f"x_e_m-dot:        {dx[10]: .8f}")
-        print(f"y_e_m-dot:        {dx[11]: .8f}")
-        print(f"z_e_m-dot:        {dx[12]: .8f}")
-        print(f"m_fuel_kg-dot:    {dx[13]: .8f}")
-        print(f"dela_ach_deg-dot: {dx[14]*R2D: .8f}")
-        print(f"dele_ach_deg-dot: {dx[15]*R2D: .8f}")
-        print(f"delr_ach_deg-dot: {dx[16]*R2D: .8f}")
-        print(f"delt_ach_pct-dot: {dx[17]: .8f}")
+        print(f"x_e_m-dot:        {dx[StateIdx.X_E_M]: .8f}")
+        print(f"y_e_m-dot:        {dx[StateIdx.Y_E_M]: .8f}")
+        print(f"z_e_m-dot:        {dx[StateIdx.Z_E_M]: .8f}")
+        print(f"m_fuel_kg-dot:    {dx[StateIdx.M_FUEL_KG]: .8f}")
+        print(f"dela_ach_deg-dot: {dx[StateIdx.DELA_ACH_RAD]*R2D: .8f}")
+        print(f"dele_ach_deg-dot: {dx[StateIdx.DELE_ACH_RAD]*R2D: .8f}")
+        print(f"delr_ach_deg-dot: {dx[StateIdx.DELR_ACH_RAD]*R2D: .8f}")
+        print(f"delt_ach_pct-dot: {dx[StateIdx.DELT_ACH_PCT]: .8f}")
         print(" ")
-        print(f"dela_trim_deg: {x_trim_full[13]: .8f}")
-        print(f"dele_trim_deg: {x_trim_full[14]: .8f}")
-        print(f"delr_trim_deg: {x_trim_full[15]: .8f}")
-        print(f"delt_trim_deg: {x_trim_full[16]: .8f}")
+        print(f"dela_trim_deg: {x_trim_full[StateIdx.DELA_ACH_RAD]: .8f}")
+        print(f"dele_trim_deg: {x_trim_full[StateIdx.DELE_ACH_RAD]: .8f}")
+        print(f"delr_trim_deg: {x_trim_full[StateIdx.DELR_ACH_RAD]: .8f}")
+        print(f"delt_trim_deg: {x_trim_full[StateIdx.DELT_ACH_PCT]: .8f}")
         
         return x_trim_full, x_trim_ref, result.message
     else:

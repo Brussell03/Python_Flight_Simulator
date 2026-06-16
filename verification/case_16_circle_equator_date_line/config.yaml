@@ -1,15 +1,15 @@
 meta:
-    job_name: "Trim_Check_Subsonic_F16"
-    description: "Subsonic F16 Trim Check"
+    job_name: "Circle_Equator_Date_Line_F16"
+    description: "Subsonic F16 Equator Date Line Circumnavigation"
 
 vehicle:
-    model: "F16"
+    model: "F16_Circumnavigate"
     overrides:
 
 instructions:
     earth_model: "WGS84"
     gravity_type: "J2"
-    integrator: "RK45"
+    integrator: "RK4"
     simulate: true
     wind: false
     perform_trim: false
@@ -45,20 +45,20 @@ compare:
         ned_velocity: true
 
 initial_conditions:
-    h_ft: 10013
-    lat_deg: 36.019167
-    long_deg: -75.674444
+    h_ft: 10000
+    lat_deg: 0
+    long_deg: -179.5
 
-    u_n_fps: 400
-    v_n_fps: 400
+    u_n_fps: 563.643
+    v_n_fps: 0
     w_n_fps: 0
 
-    p_dps: 0
+    p_dps: 0.004178073
     q_dps: 0
     r_dps: 0
     phi_deg: 0
-    theta_deg: 2.653813535191715
-    psi_deg: 45
+    theta_deg: 2.453813535191715
+    psi_deg: 0
 
     dela_ach_deg: -0.00022
     dele_ach_deg: -0.73965
@@ -68,5 +68,10 @@ initial_conditions:
 control:
     sas: true
     speedbrake: false
-    ap: false
-    circumnavigator: false
+    autopilot:
+        enabled: true
+        enable_time_s: 0
+        h_ft: 9994.5
+        V_mps: 171.79
+    circumnavigator: 0
+    type: "no_lag"

@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 import pyJanus
+from src.engine.state_mapping import StateIdxSlices, TrimStateIdxSlices
 from models.vehicle_base import Vehicle
 from src.utils.unit_conversion import UnitConverter
 from src.utils.interpolators import fastInterp1
@@ -34,7 +35,7 @@ class DAVEVehicle(Vehicle):
             var_def.set_value(UnitConverter.from_si(value, str(var_def.units), log=log))
         
     def __init__(self, name, short_name, aero_dml_path="models/cannonball/cannonball_aero.dml", inertia_dml_path="models/cannonball/cannonball_inertia.dml",
-                 prop_dml_path=None, control_dml_path=None, gnc_dml_path=None, time_history_path=None):
+                 prop_dml_path=None, control_dml_path=None, time_history_path=None):
         super().__init__()
         self._vehicle_name = name
         self._short_name = short_name
@@ -145,6 +146,11 @@ class DAVEVehicle(Vehicle):
             self.yaw_pedal_ref = self.get_var_def(self.control_sys, "pedal") # [-1, 1]
             self.sas_toggle_ref = self.get_var_def(self.control_sys, "sasOn") # 0 or 1
             self.ap_toggle_ref = self.get_var_def(self.control_sys, "apOn") # 0 or 1
+            self.circumnavigator_toggle_ref = self.get_var_def(self.control_sys, "circlePoleSW") # 0 or 1
+            
+            # Navigator inputs
+            self.lat_ref = self.get_var_def(self.control_sys, "ownshipN_deg")
+            self.long_ref = self.get_var_def(self.control_sys, "ownshipE_deg")
             
             # Autopilot command inputs
             self.equiv_airspeed_cmd_ref = self.get_var_def(self.control_sys, "keasCmd") # Equivalent airspeed command
@@ -173,57 +179,6 @@ class DAVEVehicle(Vehicle):
             self.dela_ref = self.get_var_def(self.control_sys, "ail") # Deflection angle
             self.delr_ref = self.get_var_def(self.control_sys, "rdr") # Deflection angle
             self.delt_out_ref = self.get_var_def(self.control_sys, "PWR") # [0, 100]
-        
-        # # ==========================================
-        # # 4. GNC System Initialization
-        # # ==========================================
-        # try:
-        #     self.gnc_sys = pyJanus.Janus(gnc_dml_path)
-        # except Exception as e:
-        #     self.gnc_sys = None
-        #     if gnc_dml_path is not None:
-        #         print(f"GNC system not found at: {gnc_dml_path}")
-        #         print(e)
-        
-        # if self.gnc_sys is not None:
-        #     # Inputs
-        #     self.throttle_pilot_ref = self.get_var_def(self.gnc_sys, "throttle") # [0, 1]
-        #     self.pitch_stick_ref = self.get_var_def(self.gnc_sys, "longStk") # [-1, 1]
-        #     self.roll_stick_ref = self.get_var_def(self.gnc_sys, "latStk") # [-1, 1]
-        #     self.yaw_pedal_ref = self.get_var_def(self.gnc_sys, "pedal") # [-1, 1]
-        #     self.sas_toggle_ref = self.get_var_def(self.gnc_sys, "sasOn") # 0 or 1
-        #     self.ap_toggle_ref = self.get_var_def(self.gnc_sys, "apOn") # 0 or 1
-        #     self.circumnavigator_toggle_ref = self.get_var_def(self.gnc_sys, "circlePoleSW") # 0 or 1
-            
-        #     # Navigator inputs
-        #     self.lat_ref = self.get_var_def(self.gnc_sys, "ownshipN_deg")
-        #     self.long_ref = self.get_var_def(self.gnc_sys, "ownshipE_deg")
-            
-        #     # Autopilot command inputs
-        #     self.equiv_airspeed_cmd_ref = self.get_var_def(self.gnc_sys, "keasCmd")
-        #     self.alt_cmd_ref = self.get_var_def(self.gnc_sys, "altCmd")
-            
-        #     # Sensor feedbacks for SAS and AP
-        #     self.alt_ref = self.get_var_def(self.gnc_sys, "altMsl")
-        #     self.equiv_airspeed_ref = self.get_var_def(self.gnc_sys, "Vequiv")
-        #     self.alpha_gnc_def = self.get_var_def(self.gnc_sys, "alpha")
-        #     self.beta_gnc_def = self.get_var_def(self.gnc_sys, "beta")
-        #     self.phi_ref = self.get_var_def(self.gnc_sys, "phi")
-        #     self.theta_ref = self.get_var_def(self.gnc_sys, "theta")
-        #     self.psi_ref = self.get_var_def(self.gnc_sys, "psi")
-        #     self.p_b_gnc_ref = self.get_var_def(self.gnc_sys, "pb")
-        #     self.q_b_gnc_ref = self.get_var_def(self.gnc_sys, "qb")
-        #     self.r_b_gnc_ref = self.get_var_def(self.gnc_sys, "rb")
-            
-        #     # Trimmed values of longitudinal controls
-        #     self.delt_trim_ref = self.get_var_def(self.gnc_sys, "throttleTrim") # [0, 1]
-        #     self.pitch_stick_trim_ref = self.get_var_def(self.gnc_sys, "longStkTrim") # [0, 1]
-            
-        #     # Outputs
-        #     self.dele_ref = self.get_var_def(self.gnc_sys, "el") # Deflection angle
-        #     self.dela_ref = self.get_var_def(self.gnc_sys, "ail") # Deflection angle
-        #     self.delr_ref = self.get_var_def(self.gnc_sys, "rdr") # Deflection angle
-        #     self.delt_out_ref = self.get_var_def(self.gnc_sys, "PWR") # [0, 100]
         
         # ==========================================
         # 5. Actuators
@@ -386,10 +341,10 @@ class DAVEVehicle(Vehicle):
     # ==========================================
     # Pass-through Kinematics
     # ==========================================
-    def get_control_trim_values(self, trim_list):
-        if trim_list is None:
+    def get_control_trim_values(self, x_trim_ref):
+        if x_trim_ref is None:
             return 0, 0, 0, 0
-        return trim_list[-4:]
+        return x_trim_ref[TrimStateIdxSlices.ACT_TRIM_SLICE]
     
     def set_gnc_inputs(self, t_s, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
@@ -404,8 +359,8 @@ class DAVEVehicle(Vehicle):
         self.set_var_val(self.yaw_pedal_ref, 0) # [-1, 1]
         
         # Navigator inputs
-        # self.set_var_val(self.lat_ref, lat_rad)
-        # self.set_var_val(self.long_ref, long_rad)
+        self.set_var_val(self.lat_ref, lat_rad)
+        self.set_var_val(self.long_ref, long_rad)
         
         if cmod.get("sas", False):
             self.set_var_val(self.sas_toggle_ref, 1) # Engaged
@@ -473,16 +428,13 @@ class DAVEVehicle(Vehicle):
             self.set_var_val(self.beta_gnc_def, beta_rad)
             self.set_var_val(self.phi_ref, phi_rad)
             self.set_var_val(self.theta_ref, theta_rad)
-            # print(theta_rad * R2D)
             self.set_var_val(self.psi_ref, psi_rad)
             self.set_var_val(self.p_b_gnc_ref, p_b_rps)
             self.set_var_val(self.q_b_gnc_ref, q_b_rps)
             self.set_var_val(self.r_b_gnc_ref, r_b_rps)
         
-        # if cmod.get("circumnavigator"):
-        #     self.set_var_val(self.circumnavigator_toggle_ref, 1) # circle N pole
-        # else:
-        #     self.set_var_val(self.circumnavigator_toggle_ref, 0) # circle equator/Int'l date line intersection
+        if cmod.get("circumnavigator", -1) != -1:
+            self.set_var_val(self.circumnavigator_toggle_ref, cmod.get("circumnavigator")) # 1 = circle N pole, 0 = circle equator/Int'l date line intersection
         
         # --- Trimmed Values of Longitudinal Controls ---
         if x_trim_ref is not None:
@@ -514,18 +466,12 @@ class DAVEVehicle(Vehicle):
         if not (cmod.get("sas", False) or cmod.get("ap", False) or cmod.get("circumnavigator", False)):
             return dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct
         
-        p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
+        p_b_rps, q_b_rps, r_b_rps = x[StateIdxSlices.ROT_SLICE]
         
         dela_dynamic_rad = self.roll_control(t, p_b_rps, r_b_rps, cmod)
         dele_dynamic_rad = self.pitch_control(t, q_b_rps, cmod)
         delr_dynamic_rad = self.yaw_control(t, r_b_rps, cmod)
         delt_dynamic_pct = self.throttle_control(t, cmod)
-        
-        # dela_cmd_rad = dela_trim_rad + dela_dynamic_rad
-        # dele_cmd_rad = dele_trim_rad + dele_dynamic_rad
-        # delr_cmd_rad = delr_trim_rad + delr_dynamic_rad
-        # delt_cmd_pct = delt_trim_pct + delt_dynamic_pct
-        # delt_cmd_pct = delt_dynamic_pct
         
         # return dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
         return dela_dynamic_rad, dele_dynamic_rad, delr_dynamic_rad, delt_dynamic_pct

@@ -4,7 +4,8 @@ import numpy as np
 import yaml
 import ussa1976
 
-from models.F16.F16 import F16
+from src.engine.state_mapping import StateIdx
+from models.F16.F16 import F16, F16_Circumnavigate
 from models.cannonball.cannonball import DraglessCannonball, Cannonball
 from models.brick.brick import Brick, DraglessBrick
 from src.engine.eom_solver import eom_solver
@@ -117,6 +118,8 @@ def load_simulation_config(yaml_path):
         vehicle = Brick()
     elif config['vehicle']['model'] == 'F16':
         vehicle = F16()
+    elif config['vehicle']['model'] == 'F16_Circumnavigate':
+        vehicle = F16_Circumnavigate()
     elif config['vehicle']['model'] == 'X15':
         vehicle = X15(time_history_path=th_path)
     else:
@@ -170,7 +173,7 @@ def load_simulation_config(yaml_path):
         wind_model = WindModel(0, 0, 0, 0)
     
     # Instantiate EOM
-    eom = eom_solver(earth_model=earth, wind_model=wind_model, atmo_model=amod)
+    eom = eom_solver(earth_model=earth, wind_model=wind_model, atmo_model=amod, vehicle=vehicle, control_model=control_cfg)
     
     # --- Parse Attitude First (Required for NED transformations) ---
     phi0_rad = get_si_value(init_cond_cfg, 'phi', D2R) or 0.0
@@ -279,15 +282,25 @@ def load_simulation_config(yaml_path):
     C_b2e = C_n2e @ C_b2n
     q0_e, q1_e, q2_e, q3_e = dcm_to_quat(C_b2e)
     
-    # State Vector [u, v, w, p, q, r, q0e, q1e, q2e, q3e, X_e, Y_e, Z_e, dela, dele, delr, m_fuel]
-    x0 = [
-        u0_b_mps, v0_b_mps, w0_b_mps,
-        p0_b_rps, q0_b_rps, r0_b_rps,
-        q0_e, q1_e, q2_e, q3_e,
-        x0_e, y0_e, z0_e,
-        m_fuel_kg,
-        dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct
-    ]
+    x0 = np.zeros(len(StateIdx))
+    x0[StateIdx.U_B_MPS]      = u0_b_mps
+    x0[StateIdx.V_B_MPS]      = v0_b_mps
+    x0[StateIdx.W_B_MPS]      = w0_b_mps
+    x0[StateIdx.P_B_RPS]      = p0_b_rps
+    x0[StateIdx.Q_B_RPS]      = q0_b_rps
+    x0[StateIdx.R_B_RPS]      = r0_b_rps
+    x0[StateIdx.Q0]           = q0_e
+    x0[StateIdx.Q1]           = q1_e
+    x0[StateIdx.Q2]           = q2_e
+    x0[StateIdx.Q3]           = q3_e
+    x0[StateIdx.X_E_M]        = x0_e
+    x0[StateIdx.Y_E_M]        = y0_e
+    x0[StateIdx.Z_E_M]        = z0_e
+    x0[StateIdx.M_FUEL_KG]    = m_fuel_kg
+    x0[StateIdx.DELA_ACH_RAD] = dela_ach_rad
+    x0[StateIdx.DELE_ACH_RAD] = dele_ach_rad
+    x0[StateIdx.DELR_ACH_RAD] = delr_ach_rad
+    x0[StateIdx.DELT_ACH_PCT] = delt_ach_pct
     
     print("Initial vehicle state:")
     print(f"u0_b_mps: {u0_b_mps:.8f}")

@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import pandas as pd
+from src.engine.state_mapping import StateIdxSlices, TrimStateIdxSlices
 from models.vehicle_base import Vehicle
 
 from models.X15.aerodynamics.drag_coef_X15 import CD_X15
@@ -336,10 +337,10 @@ class X15(Vehicle):
     def throttle_control(self, t_s, cmod):
         return 0
 
-    def get_control_trim_values(self, trim_list):
-        if trim_list is None:
+    def get_control_trim_values(self, x_trim_ref):
+        if x_trim_ref is None:
             return 0, 0, 0, 0
-        return trim_list[-4:]
+        return x_trim_ref[TrimStateIdxSlices.ACT_TRIM_SLICE]
     
     def set_gnc_inputs(self, t_s, cmod, amod, lat_rad, long_rad, h_m, alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref):
         pass
@@ -348,7 +349,7 @@ class X15(Vehicle):
         """
         Routes the Stability Augmentation System and superimposes commands over trim baseline.
         """
-        p_b_rps, q_b_rps, r_b_rps = x[3], x[4], x[5]
+        p_b_rps, q_b_rps, r_b_rps = x[StateIdxSlices.ROT_SLICE]
         
         # Extract trim baselines
         dela_trim_rad, dele_trim_rad, delr_trim_rad, delt_trim_pct = self.get_control_trim_values(x_trim_ref)

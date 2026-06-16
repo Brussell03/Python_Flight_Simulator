@@ -1,10 +1,21 @@
 from dataclasses import dataclass
 import numpy as np
+import pandas as pd
 
+from src.environment.wind_model import WindModel
+from src.environment.earth_model import EarthModel
+from models.vehicle_base import Vehicle
 from src.utils.constants import R2D
 
 @dataclass
 class SimData:
+    job_name: str
+    description: str
+    integrator: str
+    vehicle: Vehicle
+    earth_model: EarthModel
+    wind_model: WindModel
+    
     t_s: np.ndarray                 # simulation time steps in seconds
     u_b_mps: np.ndarray             # axial velocity of CM wrt inertial CS resolved in aircraft body fixed CS [m/s]
     v_b_mps: np.ndarray             # lateral velocity of CM wrt inertial CS resolved in aircraft body fixed CS [m/s]
@@ -16,6 +27,9 @@ class SimData:
     q1: np.ndarray                  # quaternion vector i-axis component representation of body wrt local navigation frame
     q2: np.ndarray                  # quaternion vector j-axis component representation of body wrt local navigation frame
     q3: np.ndarray                  # quaternion vector k-axis component representation of body wrt local navigation frame
+    x_e_m: np.ndarray               # x-position in ECEF frame [m]
+    y_e_m: np.ndarray               # y-position in ECEF frame [m]
+    z_e_m: np.ndarray               # z-position in ECEF frame [m]
     lat_rad: np.ndarray             # geodetic latitude of aircraft CM resolved in WGS84 ellipsoid framework [rad]
     long_rad: np.ndarray            # longitude of aircraft CM resolved in WGS84 ellipsoid framework [rad]
     h_m: np.ndarray                 # height of aircraft CM above the WGS84 reference ellipsoid [m]
@@ -35,10 +49,12 @@ class SimData:
     rho_kgpm3: np.ndarray           # local atmospheric air density [kg/m^3]
     p_kgpms2: np.ndarray            # local atmospheric ambient static pressure [N/m^2 or kg/(m*s^2)]
     T_K: np.ndarray                 # local atmospheric ambient absolute temperature [K]
+    
     mach: np.ndarray                # Mach number (ratio of true airspeed to local speed of sound) [dimensionless]
     alpha_rad: np.ndarray           # aerodynamic angle of attack [rad]
     beta_rad: np.ndarray            # aerodynamic angle of sideslip [rad]
     true_airspeed_mps: np.ndarray   # magnitude of vehicle velocity vector relative to the local air mass [m/s]
+    qbar_kgpms2: np.ndarray         # dynamic pressure [kg/ms^2]
     g_mag_mps2: np.ndarray          # local gravitational acceleration magnitude derived from position-dependent gravity model [m/s^2]
     
     u_n_mps: np.ndarray             # North component of ground velocity vector resolved in local navigation (NED) frame [m/s]
@@ -51,20 +67,28 @@ class SimData:
     l_b_kgm2ps2: np.ndarray         # net external aerodynamic and propulsive rolling moment about body fixed x-axis [N*m]
     m_b_kgm2ps2: np.ndarray         # net external aerodynamic and propulsive pitching moment about body fixed y-axis [N*m]
     n_b_kgm2ps2: np.ndarray         # net external aerodynamic and propulsive yawing moment about body fixed z-axis [N*m]
+    n_x: np.ndarray                 # load factor on the body x-axis
+    n_y: np.ndarray                 # load factor on the body y-axis
+    n_z: np.ndarray                 # load factor on the body z-axis
     
-    dela_ach_rad: np.ndarray        # actual achieved aileron surface deflection angle [rad]
-    dele_ach_rad: np.ndarray        # actual achieved elevator surface deflection angle [rad]
-    delr_ach_rad: np.ndarray        # actual achieved rudder surface deflection angle [rad]
-    delt_ach_pct: np.ndarray        # actual achieved engine throttle [0.0 to 100.0%]
+    dela_ach_rad: np.ndarray        # achieved aileron surface deflection angle [rad]
+    dele_ach_rad: np.ndarray        # achieved elevator surface deflection angle [rad]
+    delr_ach_rad: np.ndarray        # achieved rudder surface deflection angle [rad]
+    delt_ach_pct: np.ndarray        # achieved engine throttle [0.0 to 100.0%]
+    
     dela_cmd_rad: np.ndarray        # commanded aileron surface deflection angle from flight control system [rad]
     dele_cmd_rad: np.ndarray        # commanded elevator surface deflection angle from flight control system [rad]
     delr_cmd_rad: np.ndarray        # commanded rudder surface deflection angle from flight control system [rad]
     delt_cmd_pct: np.ndarray        # engine throttle lever position command [0.0 to 100.0%]
     
-    # Optional Wind Parameters (Default to None to avoid breaking previous initializations)
-    W_N_mps: np.ndarray = None      # North wind component resolved in local navigation (NED) frame [m/s]
-    W_E_mps: np.ndarray = None      # East wind component resolved in local navigation (NED) frame [m/s]
-    W_D_mps: np.ndarray = None      # Down wind component resolved in local navigation (NED) frame [m/s]
+    dela_trim_rad: np.ndarray        # trimmed aileron surface deflection angle [rad]
+    dele_trim_rad: np.ndarray        # trimmed elevator surface deflection angle [rad]
+    delr_trim_rad: np.ndarray        # trimmed rudder surface deflection angle [rad]
+    delt_trim_pct: np.ndarray        # trimmed engine throttle [0.0 to 100.0%]
+    
+    W_N_mps: np.ndarray             # North wind component resolved in local navigation (NED) frame [m/s]
+    W_E_mps: np.ndarray             # East wind component resolved in local navigation (NED) frame [m/s]
+    W_D_mps: np.ndarray             # Down wind component resolved in local navigation (NED) frame [m/s]
     
     def __post_init__(self):
         """Attempts to calculate missing telemetry data using established kinematic relationships."""
@@ -174,6 +198,13 @@ class SimData:
                 cs_safe = np.where(np.isnan(self.cs_mps) | (self.cs_mps == 0), 1e-9, self.cs_mps)
                 mach_calc = self.true_airspeed_mps / cs_safe
                 self.mach = np.where(np.isnan(self.mach), mach_calc, self.mach)
+
+        has_load_factors = not (np.isnan(self.n_x).all() and np.isnan(self.n_y).all() and np.isnan(self.n_z).all())
+        if not has_load_factors:
+            vehicle_weight = (self.vehicle.m_dry_kg + self.m_fuel_kg) * self.g_mag_mps2
+            self.n_x = self.Fx_b_kgmps2 / vehicle_weight
+            self.n_y = self.Fy_b_kgmps2 / vehicle_weight
+            self.n_z = self.Fz_b_kgmps2 / vehicle_weight
     
     @property
     def lat_deg(self) -> np.ndarray:
@@ -183,7 +214,73 @@ class SimData:
     def long_deg(self) -> np.ndarray:
         return self.long_rad * R2D
     
-    @property
-    def qbar_kgpms2(self) -> np.ndarray:
-        '''Returns the dynamic pressure.'''
-        return 0.5 * self.rho_kgpm3 * self.true_airspeed_mps**2
+    def save_npz(self, save_path: str):
+        """
+        Saves the simulation data to an .npz archive.
+        Safely extracts metadata from complex objects to prevent pickling errors.
+        """
+        # Package non-time-history data into a metadata dictionary
+        meta = {
+            'job_name': self.job_name,
+            'description': self.description,
+            'integrator': self.integrator,
+            'vehicle_name': getattr(self.vehicle, 'vehicle_name', str(self.vehicle)),
+            
+            # Earth Model Parameters
+            'earth_a': self.earth_model.a,
+            'earth_b': self.earth_model.b,
+            'earth_omega_rps': self.earth_model.omega_rps,
+            'earth_mu': self.earth_model.mu,
+            'earth_j2': self.earth_model.j2,
+            'earth_g0': self.earth_model.g0,
+            'earth_gravity_type': int(self.earth_model.gravity_type),
+            'earth_e_sq': self.earth_model.e_sq,
+            'earth_e': self.earth_model.e,
+            
+            # Wind Model Parameters
+            'wind_type': int(self.wind_model.wind_type),
+            'wind_dir_rad': self.wind_model.dir_rad,
+            'wind_offset_m': self.wind_model.offset_m,
+            'wind_slope_mps': self.wind_model.slope_mps,
+        }
+
+        # Filter the dataclass exclusively for native serializable types and numpy arrays
+        save_data = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, np.ndarray):
+                save_data[key] = value
+            elif isinstance(value, (int, float, str, bool)):
+                save_data[key] = value
+
+        # Execute save, enforcing the same structure you used previously
+        np.savez(save_path, **save_data, meta=meta)
+    
+    def save_csv(self, save_path: str, dt: float = 0.1):
+        """
+        Re-interpolates the time-history arrays to a fixed time step and saves to a CSV file.
+        """
+        # Validate time vector
+        if getattr(self, 't_s', None) is None or len(self.t_s) < 2:
+            print("Insufficient time data to execute interpolation.")
+            return
+
+        # Generate the fixed-step time vector
+        new_t = np.arange(self.t_s[0], self.t_s[-1], dt)
+        
+        # Initialize the output dictionary with the new time column
+        csv_data = {'t_s': new_t}
+        n_original = len(self.t_s)
+
+        # Iterate through dataclass properties
+        for key, value in self.__dict__.items():
+            if key == 't_s':
+                continue
+            
+            # Exclude metadata; target only arrays matching the time history dimension
+            if isinstance(value, np.ndarray) and len(value) == n_original:
+                # Linear interpolation for the new time steps
+                csv_data[key] = np.interp(new_t, self.t_s, value)
+
+        # Construct DataFrame and export
+        df = pd.DataFrame(csv_data)
+        df.to_csv(save_path, index=False)
