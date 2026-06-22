@@ -6,7 +6,7 @@ from scipy.optimize import minimize
 from src.engine.state_mapping import AuxIdx, AuxIdxSlices, StateIdx, StateIdxSlices, TrimStateIdx, TrimStateIdxSlices
 from src.utils.constants import D2R, R2D
 from src.utils.interpolators import fastInterp1
-from src.utils.kinematics import dcm_to_quat, quat_to_dcm
+from utils.math_utils import dcm_to_quat, quat_to_dcm
 
 def trim_solver(eom, tmod, x):
     """
@@ -76,7 +76,7 @@ def trim_solver(eom, tmod, x):
         # Geodetic to ECEF Conversion for EOM Compliance
         x_e_m, y_e_m, z_e_m = eom.earth_model.geodetic_to_ecef(lat_rad, long_rad, h_m)
 
-        # 2. Build the local ECEF-to-NED DCM to resolve the true orientation wrt ECEF
+        # Build the local ECEF-to-NED DCM to resolve the true orientation wrt ECEF
         sin_lat, cos_lat = math.sin(lat_rad), math.cos(lat_rad)
         sin_lon, cos_lon = math.sin(long_rad), math.cos(long_rad)
         
@@ -86,11 +86,11 @@ def trim_solver(eom, tmod, x):
             [-cos_lat * cos_lon, -cos_lat * sin_lon, -sin_lat]
         ])
         
-        # 3. Combine transformations and extract the true q_b2e quaternion
+        # Combine transformations and extract the true q_b2e quaternion
         C_b2e = C_e2n.T @ C_b2n
         q0, q1, q2, q3 = dcm_to_quat(C_b2e)
 
-        x_full = np.zeros(len(StateIdx))
+        x_full = np.zeros(StateIdx.NUM_STATES)
         x_full[StateIdx.U_B_MPS]      = u
         x_full[StateIdx.V_B_MPS]      = v
         x_full[StateIdx.W_B_MPS]      = w
@@ -110,7 +110,7 @@ def trim_solver(eom, tmod, x):
         x_full[StateIdx.DELR_ACH_RAD] = delr
         x_full[StateIdx.DELT_ACH_PCT] = delt
         
-        dx = np.empty((len(StateIdx),), dtype=float)
+        dx = np.empty((StateIdx.NUM_STATES,), dtype=float)
         auxillary_data = np.empty((len(AuxIdx),), dtype=float)
         
         # Call the EOM
@@ -287,8 +287,10 @@ def trim_solver(eom, tmod, x):
     lat_current_rad, long_current_rad, h_current_m = eom.earth_model.ecef_to_geodetic(x[StateIdx.X_E_M], x[StateIdx.Y_E_M], x[StateIdx.Z_E_M])
     h_target_m = tmod.get('h_m', h_current_m)
     
-    Cs_mps = fastInterp1(eom.atmo_model["alt_m"], eom.atmo_model["c_mps"], h_current_m)
-    c_snd = fastInterp1(eom.atmo_model['alt_m'], eom.atmo_model['c_mps'], h_target_m)
+    # Cs_mps = fastInterp1(eom.atmo_model["alt_m"], eom.atmo_model["c_mps"], h_current_m)
+    # c_snd = fastInterp1(eom.atmo_model['alt_m'], eom.atmo_model['c_mps'], h_target_m)
+    Cs_mps = eom.atmo_model.get_soundspeed(h_current_m)
+    c_snd = eom.atmo_model.get_soundspeed(h_target_m)
     
     sin_lat, cos_lat = math.sin(lat_current_rad), math.cos(lat_current_rad)
     sin_lon, cos_lon = math.sin(long_current_rad), math.cos(long_current_rad)
@@ -520,7 +522,8 @@ def trim_solver(eom, tmod, x):
     v_air_b_mps = x[StateIdx.V_B_MPS] - W_b_mps[1]
     w_air_b_mps = x[StateIdx.W_B_MPS] - W_b_mps[2]
     
-    rho_kgpm3 = fastInterp1(eom.atmo_model["alt_m"], eom.atmo_model["rho_kgpm3"], h_m)
+    # rho_kgpm3 = fastInterp1(eom.atmo_model["alt_m"], eom.atmo_model["rho_kgpm3"], h_m)
+    rho_kgpm3 = eom.atmo_model.get_density(h_m)
     true_airspeed_mps = math.sqrt(u_air_b_mps**2 + v_air_b_mps**2 + w_air_b_mps**2)
     
     alpha_rad = math.atan2(w_air_b_mps, u_air_b_mps)

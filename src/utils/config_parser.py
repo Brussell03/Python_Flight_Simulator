@@ -4,17 +4,18 @@ import numpy as np
 import yaml
 import ussa1976
 
+from src.environment.atmo_model import AtmoModel
 from src.engine.state_mapping import StateIdx
 from models.F16.F16 import F16, F16_Circumnavigate
 from models.cannonball.cannonball import DraglessCannonball, Cannonball
 from models.brick.brick import Brick, DraglessBrick
-from src.engine.eom_solver import eom_solver
+from engine.eom_solver import eom_solver
 from src.environment.earth_model import EarthModel
 from src.environment.wind_model import WindModel
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
 from src.utils.constants import D2R, FT2M, R2D
-from src.utils.kinematics import dcm_to_quat, ecef_to_ned_dcm, quat_to_dcm
+from utils.math_utils import dcm_to_quat, ecef_to_ned_dcm, quat_to_dcm
 
 def resolve_path(base_dir, path):
     # Join only if path is relative
@@ -138,13 +139,14 @@ def load_simulation_config(yaml_path):
     T_K = atmosphere["t"].values
     c0_mps = fastInterp1(alt_m, c_mps, h0_m)
     
-    amod = {
-        "alt_m": alt_m,
-        "rho_kgpm3": rho_kgpm3,
-        "c_mps": c_mps,
-        "p_Npm2" : p_Npm2,
-        "T_K": T_K
-    }
+    # amod = {
+    #     "alt_m": alt_m,
+    #     "rho_kgpm3": rho_kgpm3,
+    #     "c_mps": c_mps,
+    #     "p_Npm2" : p_Npm2,
+    #     "T_K": T_K
+    # }
+    amod = AtmoModel(alt_m, rho_kgpm3, c_mps, p_Npm2, T_K)
     
     earth_type = instruction_cfg.get('earth_model', 'WGS84') # 'WGS84', 'Spherical_Rotating', 'Spherical_NonRotating'
     gravity_mapping = {'constant': 0, 'inverse_square': 1, 'J2': 2}
@@ -282,7 +284,7 @@ def load_simulation_config(yaml_path):
     C_b2e = C_n2e @ C_b2n
     q0_e, q1_e, q2_e, q3_e = dcm_to_quat(C_b2e)
     
-    x0 = np.zeros(len(StateIdx))
+    x0 = np.zeros(StateIdx.NUM_STATES)
     x0[StateIdx.U_B_MPS]      = u0_b_mps
     x0[StateIdx.V_B_MPS]      = v0_b_mps
     x0[StateIdx.W_B_MPS]      = w0_b_mps
@@ -327,4 +329,4 @@ def load_simulation_config(yaml_path):
     print(f"delr_ach_deg: {delr_ach_rad*R2D:.8f}")
     print(f"delt_ach_pct: {delt_ach_pct:.8f}")
 
-    return eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model
+    return eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model

@@ -22,7 +22,7 @@ def run_job(input_path):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
     
     # 1. Initialization
-    eom, vehicle, amod, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
+    eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
     
     job_name = meta_cfg['job_name']
     

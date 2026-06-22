@@ -126,3 +126,73 @@ def quaternion_derivative(q: np.ndarray, omega_rps: np.ndarray, k_quat: float = 
     dq3 =  0.5 * (r*q0 - p*q2 + q_rate*q1) + k_quat * q_err * q3
     
     return np.array([dq0, dq1, dq2, dq3], dtype=np.float64)
+
+@njit
+def euler_rates_vectorized(phi_rad: np.ndarray, theta_rad: np.ndarray, p_nb_rps: np.ndarray, q_nb_rps: np.ndarray, r_nb_rps: np.ndarray) -> np.ndarray:
+    phi_dot_rps   = p_nb_rps + (q_nb_rps * np.sin(phi_rad) + r_nb_rps * np.cos(phi_rad)) * np.tan(theta_rad)
+    theta_dot_rps = q_nb_rps * np.cos(phi_rad) - r_nb_rps * np.sin(phi_rad)
+    psi_dot_rps   = (q_nb_rps * np.sin(phi_rad) + r_nb_rps * np.cos(phi_rad)) / np.cos(theta_rad)
+    
+    return np.stack((phi_dot_rps, theta_dot_rps, psi_dot_rps))
+
+@njit
+def body_to_ned_dcm(phi_rad: float, theta_rad: float, psi_rad: float) -> np.ndarray:
+    sph, cph = math.sin(phi_rad), math.cos(phi_rad)
+    sth, cth = math.sin(theta_rad), math.cos(theta_rad)
+    sps, cps = math.sin(psi_rad), math.cos(psi_rad)
+
+    C_b2n = np.array([
+        [cps*cth, cps*sth*sph - sps*cph, cps*sth*cph + sps*sph],
+        [sps*cth, sps*sth*sph + cps*cph, sps*sth*cph - cps*sph],
+        [-sth,    cth*sph,               cth*cph]
+    ], dtype=np.float64)
+    
+    return C_b2n
+
+@njit
+def b2n_dcm_to_euler(C_b2n: np.ndarray) -> np.ndarray:
+    phi_rad   = np.arctan2(C_b2n[2, 1], C_b2n[2, 2])
+    theta_rad = math.asin(min(max(-C_b2n[2, 0], -1.0), 1.0))
+    psi_rad   = np.arctan2(C_b2n[1, 0], C_b2n[0, 0])
+    
+    return np.array([phi_rad, theta_rad, psi_rad], dtype=np.float64)
+
+@njit
+def flight_path_angle(w_n_mps: float, true_airspeed_mps: float):
+    if true_airspeed_mps == 0.0:
+        return 0.0
+    
+    ratio = min(max(w_n_mps / true_airspeed_mps, -1.0), 1.0)
+    return -math.asin(ratio)
+
+@njit
+def body_velocities(true_airspeed_mps: float, alpha_rad: float, beta_rad: float) -> np.ndarray:
+    u_b_mps = true_airspeed_mps * math.cos(alpha_rad) * math.cos(beta_rad)
+    v_b_mps = true_airspeed_mps * math.sin(beta_rad)
+    w_b_mps = true_airspeed_mps * math.sin(alpha_rad) * math.cos(beta_rad)
+    
+    return np.array([u_b_mps, v_b_mps, w_b_mps], dtype=np.float64)
+
+@njit
+def true_airspeed(u_b_mps: float, v_b_mps: float, w_b_mps: float):
+    return math.sqrt(u_b_mps**2 + v_b_mps**2 + w_b_mps**2)
+
+@njit
+def euler_to_quat(phi_rad: float, theta_rad: float, psi_rad: float) -> np.ndarray:
+    q0 = math.cos(psi_rad/2)*math.cos(theta_rad/2)*math.cos(phi_rad/2) + math.sin(psi_rad/2)*math.sin(theta_rad/2)*math.sin(phi_rad/2)
+    q1 = math.cos(psi_rad/2)*math.cos(theta_rad/2)*math.sin(phi_rad/2) - math.sin(psi_rad/2)*math.sin(theta_rad/2)*math.cos(phi_rad/2)
+    q2 = math.cos(psi_rad/2)*math.sin(theta_rad/2)*math.cos(phi_rad/2) + math.sin(psi_rad/2)*math.cos(theta_rad/2)*math.sin(phi_rad/2)
+    q3 = math.sin(psi_rad/2)*math.cos(theta_rad/2)*math.cos(phi_rad/2) - math.cos(psi_rad/2)*math.sin(theta_rad/2)*math.sin(phi_rad/2)
+    return np.array([q0, q1, q2, q3], dtype=np.float64)
+
+@njit
+def dynamic_pressure(rho_kgpm3: float, true_airspeed_mps: float):
+    return 0.5 * rho_kgpm3 * true_airspeed_mps**2
+
+@njit
+def angle_of_attack(u_air_b_mps: float, w_air_b_mps: float):
+    return math.atan2(w_air_b_mps, u_air_b_mps)
+
+@njit
+def angle_of_sideslip(v_air_b_mps: float, true_airspeed_mps: float):
+    return math.asin(v_air_b_mps / true_airspeed_mps) if true_airspeed_mps > 0 else 0.0

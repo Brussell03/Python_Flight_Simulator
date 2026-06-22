@@ -1,39 +1,55 @@
+from collections import namedtuple
 from enum import IntEnum
 
 # ------------------------------------------------------
 # State Vector Mapping
 # ------------------------------------------------------
 
-class StateIdx(IntEnum):
+# Define the fields for the Numba-compatible structure
+_StateIdxStruct = namedtuple('StateIdxStruct', [
+    'U_B_MPS', 'V_B_MPS', 'W_B_MPS',
+    'P_B_RPS', 'Q_B_RPS', 'R_B_RPS',
+    'Q0', 'Q1', 'Q2', 'Q3',
+    'X_E_M', 'Y_E_M', 'Z_E_M',
+    'M_FUEL_KG',
+    'DELA_ACH_RAD', 'DELE_ACH_RAD', 'DELR_ACH_RAD', 'DELT_ACH_PCT',
+    'NUM_STATES'
+])
+
+StateIdx = _StateIdxStruct(
     # Velocities
-    U_B_MPS = 0
-    V_B_MPS = 1
-    W_B_MPS = 2
+    U_B_MPS = 0,
+    V_B_MPS = 1,
+    W_B_MPS = 2,
     
     # Body Rates
-    P_B_RPS = 3
-    Q_B_RPS = 4
-    R_B_RPS = 5
+    P_B_RPS = 3,
+    Q_B_RPS = 4,
+    R_B_RPS = 5,
     
     # Quaternions
-    Q0 = 6
-    Q1 = 7
-    Q2 = 8
-    Q3 = 9
+    Q0 = 6,
+    Q1 = 7,
+    Q2 = 8,
+    Q3 = 9,
     
     # Position
-    X_E_M = 10
-    Y_E_M = 11
-    Z_E_M = 12
+    X_E_M = 10,
+    Y_E_M = 11,
+    Z_E_M = 12,
     
     # Mass
-    M_FUEL_KG = 13
+    M_FUEL_KG = 13,
     
     # Actuators
-    DELA_ACH_RAD = 14
-    DELE_ACH_RAD = 15
-    DELR_ACH_RAD = 16
-    DELT_ACH_PCT = 17
+    DELA_ACH_RAD = 14,
+    DELE_ACH_RAD = 15,
+    DELR_ACH_RAD = 16,
+    DELT_ACH_PCT = 17,
+    
+    # Total number of states
+    NUM_STATES = 18,
+)
 
 class StateIdxSlices():
     # Define slice objects for vector extraction
