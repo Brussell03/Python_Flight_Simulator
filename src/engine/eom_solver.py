@@ -190,7 +190,7 @@ class eom_solver:
          lat_rad, long_rad, h_m, p_wind_b_rps, q_wind_b_rps, r_wind_b_rps,
          W_N_mps, W_E_mps, W_D_mps, rho_kgpm3) = compute_kinematics(
              x, self.earth_model, self.wind_model, self.atmo_model
-         )
+        )
 
         # --- 2. UNCOMPILED PYTHON LOGIC (Vehicle, Dictionaries, Routing) ---
         self.vehicle.set_gnc_inputs(t, self.control_model, self.atmo_model, lat_rad, long_rad, h_m, 

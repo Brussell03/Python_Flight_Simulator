@@ -3,7 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.engine.compare_data import compare_data_to_files
+from utils.compare_data import compare_data_to_files
 from src.utils.config_parser import load_simulation_config
 from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
