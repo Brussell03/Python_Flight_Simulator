@@ -3,24 +3,14 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-from utils.compare_data import compare_data_to_files
+from src.utils.compare_data import compare_data_to_files
 from src.utils.config_parser import load_simulation_config
 from src.engine.trim_solver import trim_solver
 from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
 from src.engine.numerical_integrators import adaptive_integration, fixed_integration
 from src.utils.plotting import SimulatorPlotter
 
-def run_job(input_path):
-    # Resolve the configuration file path
-    if os.path.isdir(input_path):
-        config_path = os.path.join(input_path, "config.yaml")
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Expected 'config.yaml' inside directory: {input_path}")
-    else:
-        config_path = input_path
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    
+def run_job(config_path):
     # 1. Initialization
     eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
     
@@ -74,8 +64,6 @@ def run_job(input_path):
     print("\n--- Post-Processing Data ---")
     
     sim_data = eom.post_process(x, t_s, aux_data_accum, job_name, meta_cfg['description'], integrator_type)
-    data_name = 'Simulation'
-    # sim_dict = {'name': data_name, 'data': sim_data}
 
     # 5. Output Management
     if output_cfg:
@@ -128,12 +116,55 @@ def run_job(input_path):
         compare_data_to_files(sim_data, compare_cfg, job_dir, title_prefix=meta_cfg['description'], wind_model=wind_model)
 
 if __name__ == "__main__":
-    # Allows running via command line: python main.py jobs/x15_descending_turn
+    # Allows running via command line: python main.py jobs/
     input_path = sys.argv[1] if len(sys.argv) > 1 else "jobs/x15_descending_turn"
     
-    run_job(input_path)
-    # try:
-    #     run_job(input_path)
-    # except Exception as e:
-    #     print(f"Simulation failed: {e}")
-    #     sys.exit(1)
+    configs_to_run = []
+
+    # 1. Path Resolution and File Discovery
+    if os.path.isfile(input_path):
+        # The user provided a direct path to a specific file
+        configs_to_run.append(input_path)
+    elif os.path.isdir(input_path):
+        # The user provided a directory; recursively find all config.yaml files
+        print(f"Scanning directory for configurations: {input_path}")
+        for root, dirs, files in os.walk(input_path):
+            if "config.yaml" in files:
+                configs_to_run.append(os.path.join(root, "config.yaml"))
+    else:
+        raise FileNotFoundError(f"Input path does not exist: {input_path}")
+
+    # 2. Execution Queue Validation
+    if not configs_to_run:
+        print(f"Execution Aborted: No 'config.yaml' files found at or beneath '{input_path}'")
+        sys.exit(0)
+
+    print(f"Found {len(configs_to_run)} configuration file(s). Starting batch execution...\n")
+
+    # 3. Isolated Batch Execution
+    successful_jobs = 0
+    failed_jobs = []
+
+    for idx, config_path in enumerate(configs_to_run, 1):
+        print(f"{'='*60}")
+        print(f"--- Job {idx}/{len(configs_to_run)}: {config_path} ---")
+        print(f"{'='*60}")
+        
+        try:
+            run_job(config_path)
+            successful_jobs += 1
+        except Exception as e:
+            print(f"\n[ERROR] Simulation failed for {config_path}: {e}")
+            failed_jobs.append((config_path, str(e)))
+            # Continue to the next job instead of crashing the batch sequence
+
+    # 4. Batch Summary Report
+    print(f"\n{'='*60}")
+    print(f"BATCH EXECUTION COMPLETE")
+    print(f"Total Jobs: {len(configs_to_run)} | Successful: {successful_jobs} | Failed: {len(failed_jobs)}")
+    
+    if failed_jobs:
+        print("\nFailed Configurations:")
+        for failed_cfg, error_msg in failed_jobs:
+            print(f" - {failed_cfg}: {error_msg}")
+        sys.exit(1) # Exit with error code if any jobs failed

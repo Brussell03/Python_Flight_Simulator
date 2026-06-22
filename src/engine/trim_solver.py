@@ -6,7 +6,7 @@ from scipy.optimize import minimize
 from src.engine.state_mapping import AuxIdx, AuxIdxSlices, StateIdx, StateIdxSlices, TrimStateIdx, TrimStateIdxSlices
 from src.utils.constants import D2R, R2D
 from src.utils.interpolators import fastInterp1
-from utils.math_utils import dcm_to_quat, quat_to_dcm
+from src.utils.math_utils import dcm_to_quat, quat_to_dcm
 
 def trim_solver(eom, tmod, x):
     """

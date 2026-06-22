@@ -4,7 +4,7 @@ from numba import njit
 from src.engine.sim_data import SimData
 from src.engine.state_mapping import AuxIdx, StateIdxSlices, StateIdx, AuxIdxSlices, TrimStateIdxSlices
 
-from utils.math_utils import (
+from src.utils.math_utils import (
     euler_rates_vectorized, quat_to_dcm, ecef_to_ned_dcm, quat_to_dcm_vectorized, wind_to_body_dcm, b2n_dcm_to_euler,
     true_airspeed, dynamic_pressure, angle_of_attack, angle_of_sideslip,
     quaternion_derivative

@@ -9,13 +9,13 @@ from src.engine.state_mapping import StateIdx
 from models.F16.F16 import F16, F16_Circumnavigate
 from models.cannonball.cannonball import DraglessCannonball, Cannonball
 from models.brick.brick import Brick, DraglessBrick
-from engine.eom_solver import eom_solver
+from src.engine.eom_solver import eom_solver
 from src.environment.earth_model import EarthModel
 from src.environment.wind_model import WindModel
 from models.X15.X15 import X15
 from src.utils.interpolators import fastInterp1
 from src.utils.constants import D2R, FT2M, R2D
-from utils.math_utils import dcm_to_quat, ecef_to_ned_dcm, quat_to_dcm
+from src.utils.math_utils import dcm_to_quat, ecef_to_ned_dcm, quat_to_dcm
 
 def resolve_path(base_dir, path):
     # Join only if path is relative
