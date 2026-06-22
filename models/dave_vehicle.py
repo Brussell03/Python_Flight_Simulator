@@ -387,7 +387,7 @@ class DAVEVehicle(Vehicle):
             equiv_airspeed_cmd_mps = ap_cfg.get('V_equiv_mps', None)
             if equiv_airspeed_cmd_mps is None:
                 true_airspeed_cmd_mps = ap_cfg.get('V_mps')
-                rho_cmd_kgpm3 = fastInterp1(amod["alt_m"], amod["rho_kgpm3"], h_cmd_m)
+                rho_cmd_kgpm3 = amod.get_density(h_cmd_m)
                 equiv_airspeed_cmd_mps = true_airspeed_cmd_mps * math.sqrt(rho_cmd_kgpm3 / rho_0)
                 
             self.set_var_val(self.equiv_airspeed_cmd_ref, equiv_airspeed_cmd_mps)

@@ -268,24 +268,25 @@ class SimulatorPlotter:
             self._plot_all_time(ax, keys[i], error)
             self._format_ax(ax, labels[i], is_error=error)
             
-            # Secondary Axis (Rates)
-            ax2 = ax.twinx()
-            for ds_idx, ds in enumerate(self.datasets):
-                if error and ds_idx == 0:
-                    continue
+            if error is False and len(self.datasets) == 1:
+                # Secondary Axis (Rates)
+                ax2 = ax.twinx()
+                for ds_idx, ds in enumerate(self.datasets):
+                    if error and ds_idx == 0:
+                        continue
+                    
+                    t, rate_val = self._get_comparison_data(ds_idx, rate_keys[i], error)
+                    if rate_val is not None and not np.all(np.isnan(rate_val)):
+                        # Use dash-dot to distinguish rates from angles visually
+                        ax2.plot(t, rate_val, color=self.colors[ds_idx], linewidth=1.0, linestyle='-.', alpha=0.6)
                 
-                t, rate_val = self._get_comparison_data(ds_idx, rate_keys[i], error)
-                if rate_val is not None and not np.all(np.isnan(rate_val)):
-                    # Use dash-dot to distinguish rates from angles visually
-                    ax2.plot(t, rate_val, color=self.colors[ds_idx], linewidth=1.0, linestyle='-.', alpha=0.6)
-            
-            # Format secondary axis manually to avoid wiping out primary grid/background
-            ylabel2 = rate_labels[i].replace(' [', ' Error [') if error else rate_labels[i]
-            ax2.set_ylabel(ylabel2, color='#909090', fontsize=10)
-            ax2.tick_params(colors='#707070', labelsize=9)
-            for spine in ax2.spines.values():
-                spine.set_color('#404040')
-            ax2.grid(False) # Turn off grid for secondary axis to prevent crisscross pattern
+                # Format secondary axis manually to avoid wiping out primary grid/background
+                ylabel2 = rate_labels[i].replace(' [', ' Error [') if error else rate_labels[i]
+                ax2.set_ylabel(ylabel2, color='#909090', fontsize=10)
+                ax2.tick_params(colors='#707070', labelsize=9)
+                for spine in ax2.spines.values():
+                    spine.set_color('#404040')
+                ax2.grid(False) # Turn off grid for secondary axis to prevent crisscross pattern
             
         plt.tight_layout()
         if self.save:

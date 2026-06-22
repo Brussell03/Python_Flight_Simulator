@@ -4,28 +4,40 @@ meta:
 
 vehicle:
     model: "X15"
+    overrides:
 
 instructions:
     earth_model: "WGS84"
+    gravity_type: "J2"
     integrator: "RK45"
-    simulate: true
+    wind: false
+    simulation:
+        enabled: true
+        t0_s: 0.0
+        tf_s: 10.0
+        dt_s: 0.005
     perform_trim: true
-    perform_linearization: false
-    compare: false
-    t0_s: 0.0
-    tf_s: 10.0
-    dt_s: 0.005
+    analysis:
+        comparison:
+            enabled: false
+        linearization:
+            enabled: false
+            t_s: 30
 
 output:
-    save_data: true
+    save_data: false
     show_plots: true
     plots:
         6dof: true
         attitude: true
         controls: true
         aerodynamics: true
+        air_data: true
         geodetic: true
         ned_velocity: true
+        forces: true
+        load_factors: true
+        3d_trajectory: true
 
 initial_conditions:
     Mach: 2.4

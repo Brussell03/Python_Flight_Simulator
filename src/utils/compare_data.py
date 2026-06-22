@@ -57,13 +57,15 @@ def compare_data_to_files(dataset, compare_cfg, job_dir, title_prefix="", wind_m
     show_values = compare_cfg.get('show_values', True)
     plot_error = compare_cfg.get('plot_error', False)
     show_error = compare_cfg.get('show_error', False)
+    
     save_dir = os.path.join(job_dir, "output/comparisons/") if compare_cfg.get('save_compare', False) else None
     
     datasets = [dataset]
     sim_datas, file_names = parse_all_csvs(compare_path, wind_model=wind_model)
     
     for i in range(len(sim_datas)):
-        datasets.append({'name': file_names[i], 'data': sim_datas[i]})
+        sim_datas[i].job_name = file_names[i]
+        datasets.append(sim_datas[i])
 
     # Setup the output directory
     if save_dir is not None:
@@ -77,8 +79,11 @@ def compare_data_to_files(dataset, compare_cfg, job_dir, title_prefix="", wind_m
         if plot_cfg.get('attitude', False):     plotter.plot_attitude(show=show_values)
         if plot_cfg.get('controls', False):     plotter.plot_controls(show=show_values)
         if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics(show=show_values)
+        if plot_cfg.get('air_data', False):     plotter.plot_air_data(show=show_values)
         if plot_cfg.get('geodetic', False):     plotter.plot_geodetic(show=show_values)
         if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity(show=show_values)
+        if plot_cfg.get('forces', False):       plotter.plot_forces(show=show_values)
+        if plot_cfg.get('load_factors', False): plotter.plot_load_factors(show=show_values)
     
     if show_values and not show_error:
         plt.show(block=True)
@@ -90,8 +95,11 @@ def compare_data_to_files(dataset, compare_cfg, job_dir, title_prefix="", wind_m
         if plot_cfg.get('attitude', False):     plotter.plot_attitude(show=show_error, error=True)
         if plot_cfg.get('controls', False):     plotter.plot_controls(show=show_error, error=True)
         if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics(show=show_error, error=True)
+        if plot_cfg.get('air_data', False):     plotter.plot_air_data(show=show_error, error=True)
         if plot_cfg.get('geodetic', False):     plotter.plot_geodetic(show=show_error, error=True)
         if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity(show=show_error, error=True)
+        if plot_cfg.get('forces', False):       plotter.plot_forces(show=show_error, error=True)
+        if plot_cfg.get('load_factors', False): plotter.plot_load_factors(show=show_error, error=True)
     
     # Block execution until user closes all plot windows
     if show_error: plt.show(block=True)

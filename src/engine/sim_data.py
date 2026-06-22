@@ -199,12 +199,14 @@ class SimData:
                 mach_calc = self.true_airspeed_mps / cs_safe
                 self.mach = np.where(np.isnan(self.mach), mach_calc, self.mach)
 
-        has_load_factors = not (np.isnan(self.n_x).all() and np.isnan(self.n_y).all() and np.isnan(self.n_z).all())
-        if not has_load_factors:
-            vehicle_weight = (self.vehicle.m_dry_kg + self.m_fuel_kg) * self.g_mag_mps2
-            self.n_x = self.Fx_b_kgmps2 / vehicle_weight
-            self.n_y = self.Fy_b_kgmps2 / vehicle_weight
-            self.n_z = self.Fz_b_kgmps2 / vehicle_weight
+        if self.vehicle is not None:
+            print(self.vehicle)
+            # has_load_factors = not (np.isnan(self.n_x).all() and np.isnan(self.n_y).all() and np.isnan(self.n_z).all())
+            # if not has_load_factors:
+            #     vehicle_weight = (self.vehicle.m_dry_kg + self.m_fuel_kg) * self.g_mag_mps2
+            #     self.n_x = self.Fx_b_kgmps2 / vehicle_weight
+            #     self.n_y = self.Fy_b_kgmps2 / vehicle_weight
+            #     self.n_z = self.Fz_b_kgmps2 / vehicle_weight
     
     @property
     def lat_deg(self) -> np.ndarray:

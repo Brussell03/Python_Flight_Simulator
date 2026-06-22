@@ -94,7 +94,6 @@ def load_simulation_config(yaml_path):
     meta_cfg = config.get('meta', {})
     instruction_cfg = config.get('instructions', {})
     output_cfg = config.get('output', {})
-    compare_cfg = config.get('compare', {})
     init_cond_cfg = config.get('initial_conditions', {})
     trim_cfg = config.get('trim', {})
     control_cfg = config.get('control', {})
@@ -329,4 +328,4 @@ def load_simulation_config(yaml_path):
     print(f"delr_ach_deg: {delr_ach_rad*R2D:.8f}")
     print(f"delt_ach_pct: {delt_ach_pct:.8f}")
 
-    return eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model
+    return eom, vehicle, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model

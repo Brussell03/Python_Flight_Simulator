@@ -11,14 +11,15 @@ from src.engine.numerical_integrators import adaptive_integration, fixed_integra
 from src.utils.plotting import SimulatorPlotter
 
 def run_job(config_path):
+    # ==========================================
     # 1. Initialization
-    eom, vehicle, meta_cfg, instruction_cfg, output_cfg, compare_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
-    
+    # ==========================================
+    eom, vehicle, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
     job_name = meta_cfg['job_name']
     
-    t0_s, tf_s, dt_s = instruction_cfg['t0_s'], instruction_cfg['tf_s'], instruction_cfg['dt_s']
-    
-    # 2. Trim & Analysis Dispatch
+    # ==========================================
+    # 2. Initial Trim
+    # ==========================================
     x_trim_ref = None
     if instruction_cfg.get('perform_trim', False):
         print("\n--- Executing Trim Solver ---")
@@ -26,23 +27,16 @@ def run_job(config_path):
         
         if x_trim is not None:
             x0 = x_trim # Override initial conditions with trim state
-            
-            if instruction_cfg.get('perform_linearization', False):
-                print("\n--- Executing Linearization ---")
-                
-                state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'm_fuel', 'dela', 'dele', 'delr', 'delt']
-                A, B, core_state_names, core_control_names = compute_state_space(x_trim, x_trim_ref, vehicle, control_cfg, state_names)
-                
-                analyze_mode_shapes(A, core_state_names)
-                plot_linear_response(A, B, t_end=30.0) # Set to 30s to watch the unstable modes diverge
-                advanced_stability_analysis(A, B, core_state_names, core_control_names)
     
-    # 3. Execution Loop
-    if not instruction_cfg.get('simulate', False): return
+    # ==========================================
+    # 3. Simulation Loop
+    # ==========================================
+    simulation_cfg = instruction_cfg.get('simulation', {})
+    if not simulation_cfg.get('enabled', False): return
+    t0_s, tf_s, dt_s = simulation_cfg['t0_s'], simulation_cfg['tf_s'], simulation_cfg['dt_s']
     
     print("\n--- Running 6-DOF Simulation ---")
     t_s = np.arange(t0_s, tf_s + dt_s, dt_s)
-    nt_s = t_s.size
     
     # Route Integrator Configuration
     integrator_type = instruction_cfg.get('integrator', 'RK45')
@@ -65,7 +59,9 @@ def run_job(config_path):
     
     sim_data = eom.post_process(x, t_s, aux_data_accum, job_name, meta_cfg['description'], integrator_type)
 
-    # 5. Output Management
+    # ==========================================
+    # 4. Output
+    # ==========================================
     if output_cfg:
         
         # Define Job-Specific Directories
@@ -112,8 +108,27 @@ def run_job(config_path):
                 # Force close all background figures before moving to comparison
                 plt.close('all')
     
-    if instruction_cfg.get('compare', False) and compare_cfg.get('path') is not None:
+    # ==========================================
+    # 5. Analysis
+    # ==========================================
+    analysis_cfg = instruction_cfg.get('analysis', {})
+    
+    # Comaprison
+    compare_cfg = analysis_cfg.get('comparison', {})
+    if compare_cfg.get('enabled', False) and compare_cfg.get('path') is not None:
         compare_data_to_files(sim_data, compare_cfg, job_dir, title_prefix=meta_cfg['description'], wind_model=wind_model)
+    
+    # Linearization
+    linearization_cfg = analysis_cfg.get('linearization', {})
+    if linearization_cfg.get('enabled', False):
+        print("\n--- Executing Linearization ---")
+        
+        state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'm_fuel', 'dela', 'dele', 'delr', 'delt']
+        A, B, core_state_names, core_control_names = compute_state_space(x_trim, x_trim_ref, vehicle, control_cfg, state_names)
+        
+        analyze_mode_shapes(A, core_state_names)
+        plot_linear_response(A, B, t_end=30.0) # Set to 30s to watch the unstable modes diverge
+        advanced_stability_analysis(A, B, core_state_names, core_control_names)
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py jobs/
@@ -150,13 +165,15 @@ if __name__ == "__main__":
         print(f"--- Job {idx}/{len(configs_to_run)}: {config_path} ---")
         print(f"{'='*60}")
         
-        try:
-            run_job(config_path)
-            successful_jobs += 1
-        except Exception as e:
-            print(f"\n[ERROR] Simulation failed for {config_path}: {e}")
-            failed_jobs.append((config_path, str(e)))
-            # Continue to the next job instead of crashing the batch sequence
+        run_job(config_path)
+        successful_jobs += 1
+        # try:
+        #     run_job(config_path)
+        #     successful_jobs += 1
+        # except Exception as e:
+        #     print(f"\n[ERROR] Simulation failed for {config_path}: {e}")
+        #     failed_jobs.append((config_path, str(e)))
+        #     # Continue to the next job instead of crashing the batch sequence
 
     # 4. Batch Summary Report
     print(f"\n{'='*60}")

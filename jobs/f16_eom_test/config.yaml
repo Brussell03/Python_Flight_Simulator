@@ -10,13 +10,16 @@ instructions:
     earth_model: "WGS84"
     gravity_type: "J2"
     integrator: "RK4"
-    simulate: true
     wind: false
+    simulation:
+        enabled: true
+        t0_s: 0.0
+        tf_s: 10.0
+        dt_s: 0.012
     perform_trim: true
-    compare: false
-    t0_s: 0.0
-    tf_s: 10.0
-    dt_s: 0.012
+    analysis:
+        comparison:
+            enabled: false
 
 output:
     save_data: true
@@ -26,8 +29,12 @@ output:
         attitude: true
         controls: true
         aerodynamics: true
+        air_data: true
         geodetic: true
         ned_velocity: true
+        forces: true
+        load_factors: true
+        3d_trajectory: true
 
 initial_conditions:
     h_ft: 10013
