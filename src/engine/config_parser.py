@@ -81,7 +81,7 @@ def flight_path_angle_check(phi0_rad, theta0_rad, psi0_rad, u0_bf_mps, v0_bf_mps
             f"which contradicts the configured/derived target gamma of {math.degrees(gamma_rad):.2f}°."
         )
 
-def load_simulation_config(yaml_path):
+def load_job_config(yaml_path):
     """
     Parses the YAML config and returns the required simulation objects.
     """
@@ -320,4 +320,4 @@ def load_simulation_config(yaml_path):
     print(f"delr_ach_deg: {delr_ach_rad*R2D:.8f}")
     print(f"delt_ach_pct: {delt_ach_pct:.8f}")
 
-    return eom, vehicle, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0, base_dir, wind_model
+    return eom, meta_cfg, instruction_cfg, output_cfg, trim_cfg, x0, base_dir

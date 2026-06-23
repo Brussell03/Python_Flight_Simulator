@@ -58,6 +58,8 @@ class StateIdxSlices():
     QUAT_SLICE = slice(StateIdx.Q0, StateIdx.Q3 + 1)
     POS_SLICE = slice(StateIdx.X_E_M, StateIdx.Z_E_M + 1)
     ACT_SLICE = slice(StateIdx.DELA_ACH_RAD, StateIdx.DELT_ACH_PCT + 1)
+    STATE_SLICE = slice(StateIdx.U_B_MPS, StateIdx.M_FUEL_KG + 1)
+    CONTROL_SLICE = slice(StateIdx.DELA_ACH_RAD, StateIdx.DELT_ACH_PCT + 1)
 
 # ------------------------------------------------------
 # Auxilliary Data Vector Mapping
@@ -146,3 +148,4 @@ class TrimStateIdxSlices():
     ANGLE_SLICE = slice(TrimStateIdx.PHI_RAD, TrimStateIdx.PSI_RAD + 1)
     POS_SLICE = slice(TrimStateIdx.LAT_RAD, TrimStateIdx.H_M + 1)
     ACT_TRIM_SLICE = slice(TrimStateIdx.DELA_TRIM_RAD, TrimStateIdx.DELT_TRIM_PCT + 1)
+    STATE_SLICE = slice(StateIdx.U_B_MPS, StateIdx.M_FUEL_KG + 1)

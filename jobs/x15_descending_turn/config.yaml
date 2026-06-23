@@ -12,17 +12,25 @@ instructions:
     integrator: "RK45"
     wind: false
     simulation:
-        enabled: true
+        enabled: false
         t0_s: 0.0
         tf_s: 10.0
         dt_s: 0.005
     perform_trim: true
     analysis:
-        comparison:
-            enabled: false
         linearization:
-            enabled: false
-            t_s: 30
+            enabled: true
+            show_plots: true
+            eigenvalues: true
+            pole_zero_map: true
+            bode:
+                enabled: true
+                inputs: ['dele', 'dela']     # Restrict to prevent massive grid plots
+                outputs: ['q', 'p', 'phi', 'theta']
+            step_response:
+                enabled: true
+                target_input: 'dele'
+                t_end: 20.0
 
 output:
     save_data: true
@@ -78,9 +86,12 @@ control:
     t1_s: 0.0
     t2_s: 1.0
     t3_s: 2.0
-    aileron: false
-    elevator: false
-    rudder: false
+    aileron:
+        enabled: false
+    elevator:
+        enabled: false
+    rudder:
+        enabled: false
     sas: true
     Kq: 12.0
     Kp: -6.0

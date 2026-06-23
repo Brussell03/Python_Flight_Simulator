@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from src.engine.sim_data import SimData
 from src.utils.plotting import SimulatorPlotter
 from src.utils.parse_to_sim_data import parse_all_csvs
-from src.utils.config_parser import resolve_path
+from src.engine.config_parser import resolve_path
 
 def load_npz(file_path):
     """Loads npz and extracts individual SimData arrays and meta."""

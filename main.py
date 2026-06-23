@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from src.utils.compare_data import compare_data_to_files
-from src.utils.config_parser import load_simulation_config
+from src.engine.config_parser import load_job_config
 from src.engine.trim_solver import trim_solver
-from src.engine.linearization import analyze_mode_shapes, compute_state_space, analyze_eigenvalues, advanced_stability_analysis, plot_linear_response
+from src.engine.linearization import execute_linearization_commands
 from src.engine.numerical_integrators import adaptive_integration, fixed_integration
 from src.utils.plotting import SimulatorPlotter
 
@@ -14,7 +14,7 @@ def run_job(config_path):
     # ==========================================
     # 1. Initialization
     # ==========================================
-    eom, vehicle, meta_cfg, instruction_cfg, output_cfg, trim_cfg, control_cfg, x0, job_dir, wind_model = load_simulation_config(config_path)
+    eom, meta_cfg, instruction_cfg, output_cfg, trim_cfg, x0, job_dir = load_job_config(config_path)
     job_name = meta_cfg['job_name']
     
     # ==========================================
@@ -32,84 +32,81 @@ def run_job(config_path):
     # 3. Simulation Loop
     # ==========================================
     simulation_cfg = instruction_cfg.get('simulation', {})
-    if not simulation_cfg.get('enabled', False): return
-    t0_s, tf_s, dt_s = simulation_cfg['t0_s'], simulation_cfg['tf_s'], simulation_cfg['dt_s']
-    
-    print("\n--- Running 6-DOF Simulation ---")
-    t_s = np.arange(t0_s, tf_s + dt_s, dt_s)
-    
-    # Route Integrator Configuration
-    integrator_type = instruction_cfg.get('integrator', 'RK45')
-    adaptive_methods = ['RK45', 'RK23', 'DOP853', 'Radau', 'BDF', 'LSODA']
-    
-    if integrator_type in adaptive_methods:
-        t_span = (t0_s, tf_s + dt_s)
+    if simulation_cfg.get('enabled', False):
+        t0_s, tf_s, dt_s = simulation_cfg['t0_s'], simulation_cfg['tf_s'], simulation_cfg['dt_s']
         
-        t_s, x, aux_data_accum = adaptive_integration(
-            eom.solve_eom, t_span, t_s, x0, x_trim_ref,
-            method=integrator_type, rtol=1e-6, atol=1e-6
-        )
+        print("\n--- Running 6-DOF Simulation ---")
+        t_s = np.arange(t0_s, tf_s + dt_s, dt_s)
         
-    else:
-        # Fallback to Fixed-Step RK4
-        t_s, x, aux_data_accum = fixed_integration(eom.solve_eom, t_s, dt_s, x0, x_trim_ref)
-
-    # Vectorized Post-Processing
-    print("\n--- Post-Processing Data ---")
-    
-    sim_data = eom.post_process(x, t_s, aux_data_accum, job_name, meta_cfg['description'], integrator_type)
-
-    # ==========================================
-    # 4. Output
-    # ==========================================
-    if output_cfg:
+        # Route Integrator Configuration
+        integrator_type = instruction_cfg.get('integrator', 'RK45')
+        adaptive_methods = ['RK45', 'RK23', 'DOP853', 'Radau', 'BDF', 'LSODA']
         
-        # Define Job-Specific Directories
-        out_dir = os.path.join(job_dir, 'output')
-        data_dir = os.path.join(out_dir, "data")
-        plot_dir = os.path.join(out_dir, "plots")
-        
-        # Save Numerical Data
-        if output_cfg.get('save_data', False):
-            os.makedirs(data_dir, exist_ok=True)
-            save_path = os.path.join(data_dir, job_name)
-            sim_data.save_npz(save_path + ".npz")
-            sim_data.save_csv(save_path + ".csv")
-            print(f"\n--- Saving Output ---")
-            print(f"Data saved to: {data_dir}")
+        if integrator_type in adaptive_methods:
+            t_span = (t0_s, tf_s + dt_s)
+            
+            t_s, x, aux_data_accum = adaptive_integration(
+                eom.solve_eom, t_span, t_s, x0, x_trim_ref,
+                method=integrator_type, rtol=1e-6, atol=1e-6
+            )
         else:
-            plot_dir = None
+            # Fallback to Fixed-Step RK4
+            t_s, x, aux_data_accum = fixed_integration(eom.solve_eom, t_s, dt_s, x0, x_trim_ref)
 
-        # Dispatch Plots Based on Config Booleans
-        plot_cfg = output_cfg.get('plots', {})
-        show_plots = output_cfg.get('show_plots', False)
+        # Vectorized Post-Processing
+        print("\n--- Post-Processing Data ---")
         
-        if any(plot_cfg.values()): 
-            # Only instantiate plotter and make dir if at least one plot is True
-            if output_cfg.get('save_data', False): os.makedirs(plot_dir, exist_ok=True)
-            plotter = SimulatorPlotter(sim_data, title_prefix=meta_cfg['description'], plot_dir=plot_dir)
+        sim_data = eom.post_process(x, t_s, aux_data_accum, job_name, meta_cfg['description'], integrator_type)
+
+        # --- Output ---
+        if output_cfg:
             
-            if plot_cfg.get('6dof', False):         plotter.plot_6dof(show=show_plots)
-            if plot_cfg.get('attitude', False):     plotter.plot_attitude(show=show_plots)
-            if plot_cfg.get('controls', False):     plotter.plot_controls(show=show_plots)
-            if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics(show=show_plots)
-            if plot_cfg.get('air_data', False):     plotter.plot_air_data(show=show_plots)
-            if plot_cfg.get('geodetic', False):     plotter.plot_geodetic(show=show_plots)
-            if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity(show=show_plots)
-            if plot_cfg.get('forces', False):       plotter.plot_forces(show=show_plots)
-            if plot_cfg.get('load_factors', False): plotter.plot_load_factors(show=show_plots)
-            if plot_cfg.get('3d_trajectory', False): plotter.plot_3d_trajectory(show=show_plots)
-            print(f"Plots saved to: {plot_dir}")
+            # Define Job-Specific Directories
+            out_dir = os.path.join(job_dir, 'output')
+            data_dir = os.path.join(out_dir, "data")
+            plot_dir = os.path.join(out_dir, "plots")
             
-            if show_plots:
-                print("Displaying plots. Close all plot windows to terminate script.")
-                plt.show(block=True)
+            # Save Numerical Data
+            if output_cfg.get('save_data', False):
+                os.makedirs(data_dir, exist_ok=True)
+                save_path = os.path.join(data_dir, job_name)
+                sim_data.save_npz(save_path + ".npz")
+                sim_data.save_csv(save_path + ".csv")
+                print(f"\n--- Saving Output ---")
+                print(f"Data saved to: {data_dir}")
             else:
-                # Force close all background figures before moving to comparison
-                plt.close('all')
+                plot_dir = None
+
+            # Dispatch Plots Based on Config Booleans
+            plot_cfg = output_cfg.get('plots', {})
+            show_plots = output_cfg.get('show_plots', False)
+            
+            if any(plot_cfg.values()): 
+                # Only instantiate plotter and make dir if at least one plot is True
+                if output_cfg.get('save_data', False): os.makedirs(plot_dir, exist_ok=True)
+                plotter = SimulatorPlotter(sim_data, title_prefix=meta_cfg['description'], plot_dir=plot_dir)
+                
+                if plot_cfg.get('6dof', False):         plotter.plot_6dof(show=show_plots)
+                if plot_cfg.get('attitude', False):     plotter.plot_attitude(show=show_plots)
+                if plot_cfg.get('controls', False):     plotter.plot_controls(show=show_plots)
+                if plot_cfg.get('aerodynamics', False): plotter.plot_aerodynamics(show=show_plots)
+                if plot_cfg.get('air_data', False):     plotter.plot_air_data(show=show_plots)
+                if plot_cfg.get('geodetic', False):     plotter.plot_geodetic(show=show_plots)
+                if plot_cfg.get('ned_velocity', False): plotter.plot_ned_velocity(show=show_plots)
+                if plot_cfg.get('forces', False):       plotter.plot_forces(show=show_plots)
+                if plot_cfg.get('load_factors', False): plotter.plot_load_factors(show=show_plots)
+                if plot_cfg.get('3d_trajectory', False): plotter.plot_3d_trajectory(show=show_plots)
+                print(f"Plots saved to: {plot_dir}")
+                
+                if show_plots:
+                    print("Displaying plots. Close all plot windows to terminate script.")
+                    plt.show(block=True)
+                else:
+                    # Force close all background figures before moving to comparison
+                    plt.close('all')
     
     # ==========================================
-    # 5. Analysis
+    # 4. Analysis
     # ==========================================
     analysis_cfg = instruction_cfg.get('analysis', {})
     
@@ -117,19 +114,17 @@ def run_job(config_path):
     compare_cfg = analysis_cfg.get('comparison', {})
     if compare_cfg.get('enabled', False) and compare_cfg.get('path') is not None:
         print(f"\n--- Running Comparison ---")
-        compare_data_to_files(sim_data, compare_cfg, job_dir, title_prefix=meta_cfg['description'], wind_model=wind_model)
+        compare_data_to_files(sim_data, compare_cfg, job_dir, title_prefix=meta_cfg['description'], wind_model=eom.wind_model)
     
     # Linearization
     linearization_cfg = analysis_cfg.get('linearization', {})
     if linearization_cfg.get('enabled', False):
         print("\n--- Executing Linearization ---")
         
-        state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'lat', 'long', 'h', 'm_fuel', 'dela', 'dele', 'delr', 'delt']
-        A, B, core_state_names, core_control_names = compute_state_space(x_trim, x_trim_ref, vehicle, control_cfg, state_names)
+        state_names = ['u', 'v', 'w', 'p', 'q', 'r', 'q0', 'q1', 'q2', 'q3', 'x', 'y', 'z', 'm_fuel', 'dela', 'dele', 'delr', 'delt']
+        control_names = ['dela', 'dele', 'delr', 'delt']
         
-        analyze_mode_shapes(A, core_state_names)
-        plot_linear_response(A, B, t_end=30.0) # Set to 30s to watch the unstable modes diverge
-        advanced_stability_analysis(A, B, core_state_names, core_control_names)
+        execute_linearization_commands(linearization_cfg, eom, 0, x0, x_trim_ref, state_names, control_names)
 
 if __name__ == "__main__":
     # Allows running via command line: python main.py jobs/
