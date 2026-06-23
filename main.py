@@ -116,6 +116,7 @@ def run_job(config_path):
     # Comaprison
     compare_cfg = analysis_cfg.get('comparison', {})
     if compare_cfg.get('enabled', False) and compare_cfg.get('path') is not None:
+        print(f"\n--- Running Comparison ---")
         compare_data_to_files(sim_data, compare_cfg, job_dir, title_prefix=meta_cfg['description'], wind_model=wind_model)
     
     # Linearization

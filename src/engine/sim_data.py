@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from typing import Optional
+import inspect
 import numpy as np
 import pandas as pd
 
@@ -7,14 +9,15 @@ from src.environment.earth_model import EarthModel
 from models.vehicle_base import Vehicle
 from src.utils.constants import R2D
 
-@dataclass
+# Enforce kw_only so defaults can be assigned without breaking inheritance or ordering
+@dataclass(kw_only=True)
 class SimData:
-    job_name: str
-    description: str
-    integrator: str
-    vehicle: Vehicle
-    earth_model: EarthModel
-    wind_model: WindModel
+    job_name: str = "Unknown Job"
+    description: str = ""
+    integrator: str = ""
+    vehicle: Optional[Vehicle] = None
+    earth_model: Optional[EarthModel] = None
+    wind_model: Optional[WindModel] = None
     
     t_s: np.ndarray                 # simulation time steps in seconds
     u_b_mps: np.ndarray             # axial velocity of CM wrt inertial CS resolved in aircraft body fixed CS [m/s]
@@ -199,14 +202,16 @@ class SimData:
                 mach_calc = self.true_airspeed_mps / cs_safe
                 self.mach = np.where(np.isnan(self.mach), mach_calc, self.mach)
 
-        if self.vehicle is not None:
-            print(self.vehicle)
-            # has_load_factors = not (np.isnan(self.n_x).all() and np.isnan(self.n_y).all() and np.isnan(self.n_z).all())
-            # if not has_load_factors:
-            #     vehicle_weight = (self.vehicle.m_dry_kg + self.m_fuel_kg) * self.g_mag_mps2
-            #     self.n_x = self.Fx_b_kgmps2 / vehicle_weight
-            #     self.n_y = self.Fy_b_kgmps2 / vehicle_weight
-            #     self.n_z = self.Fz_b_kgmps2 / vehicle_weight
+        # Safe evaluation: Returns None if the attribute was completely stripped or missing
+        vehicle_obj = getattr(self, 'vehicle', None)
+        if vehicle_obj is not None:
+            print(vehicle_obj)
+            has_load_factors = not (np.isnan(self.n_x).all() and np.isnan(self.n_y).all() and np.isnan(self.n_z).all())
+            if not has_load_factors:
+                vehicle_weight = (self.vehicle.m_dry_kg + self.m_fuel_kg) * self.g_mag_mps2
+                self.n_x = self.Fx_b_kgmps2 / vehicle_weight
+                self.n_y = self.Fy_b_kgmps2 / vehicle_weight
+                self.n_z = self.Fz_b_kgmps2 / vehicle_weight
     
     @property
     def lat_deg(self) -> np.ndarray:
@@ -220,31 +225,38 @@ class SimData:
         """
         Saves the simulation data to an .npz archive.
         Safely extracts metadata from complex objects to prevent pickling errors.
+        Handles cases where complex models are None (e.g., when loaded from a file).
         """
-        # Package non-time-history data into a metadata dictionary
+        # Package core metadata safely
         meta = {
             'job_name': self.job_name,
             'description': self.description,
             'integrator': self.integrator,
-            'vehicle_name': getattr(self.vehicle, 'vehicle_name', str(self.vehicle)),
-            
-            # Earth Model Parameters
-            'earth_a': self.earth_model.a,
-            'earth_b': self.earth_model.b,
-            'earth_omega_rps': self.earth_model.omega_rps,
-            'earth_mu': self.earth_model.mu,
-            'earth_j2': self.earth_model.j2,
-            'earth_g0': self.earth_model.g0,
-            'earth_gravity_type': int(self.earth_model.gravity_type),
-            'earth_e_sq': self.earth_model.e_sq,
-            'earth_e': self.earth_model.e,
-            
-            # Wind Model Parameters
-            'wind_type': int(self.wind_model.wind_type),
-            'wind_dir_rad': self.wind_model.dir_rad,
-            'wind_offset_m': self.wind_model.offset_m,
-            'wind_slope_mps': self.wind_model.slope_mps,
+            'vehicle_name': getattr(self.vehicle, 'vehicle_name', str(self.vehicle)) if self.vehicle else "None",
         }
+
+        # Safe extraction for Earth Model
+        if self.earth_model is not None:
+            meta.update({
+                'earth_a': self.earth_model.a,
+                'earth_b': self.earth_model.b,
+                'earth_omega_rps': self.earth_model.omega_rps,
+                'earth_mu': self.earth_model.mu,
+                'earth_j2': self.earth_model.j2,
+                'earth_g0': self.earth_model.g0,
+                'earth_gravity_type': int(self.earth_model.gravity_type),
+                'earth_e_sq': self.earth_model.e_sq,
+                'earth_e': self.earth_model.e,
+            })
+            
+        # Safe extraction for Wind Model
+        if self.wind_model is not None:
+            meta.update({
+                'wind_type': int(self.wind_model.wind_type),
+                'wind_dir_rad': self.wind_model.dir_rad,
+                'wind_offset_m': self.wind_model.offset_m,
+                'wind_slope_mps': self.wind_model.slope_mps,
+            })
 
         # Filter the dataclass exclusively for native serializable types and numpy arrays
         save_data = {}
@@ -286,3 +298,55 @@ class SimData:
         # Construct DataFrame and export
         df = pd.DataFrame(csv_data)
         df.to_csv(save_path, index=False)
+    
+    @classmethod
+    def from_npz(cls, load_path: str) -> 'SimData':
+        """
+        Reconstructs a SimData instance from an .npz archive.
+        Complex objects (Vehicle, EarthModel, WindModel) are omitted as they 
+        cannot be natively serialized into the npz without pickling.
+        """
+        data = np.load(load_path, allow_pickle=True)
+        kwargs = {key: data[key] for key in data.files if key != 'meta'}
+        
+        if 'meta' in data.files:
+            meta = data['meta'].item()
+            kwargs['job_name'] = meta.get('job_name', 'Loaded_Job')
+            kwargs['description'] = meta.get('description', '')
+            kwargs['integrator'] = meta.get('integrator', '')
+            
+        # Ensure complex models default to None to satisfy initialization
+        kwargs['vehicle'] = None
+        kwargs['earth_model'] = None
+        kwargs['wind_model'] = None
+        
+        return cls(**kwargs)
+
+    @classmethod
+    def from_csv(cls, load_path: str) -> 'SimData':
+        """
+        Reconstructs a SimData instance from a .csv file.
+        Fills missing np.ndarray fields with NaN arrays to maintain matrix shapes.
+        """
+        df = pd.read_csv(load_path)
+        kwargs = {col: df[col].to_numpy() for col in df.columns}
+        
+        kwargs['job_name'] = 'CSV_Import'
+        kwargs['description'] = f'Imported from {load_path}'
+        kwargs['integrator'] = 'Unknown'
+        kwargs['vehicle'] = None
+        kwargs['earth_model'] = None
+        kwargs['wind_model'] = None
+
+        # Introspect the dataclass signature to fill missing required arrays with NaNs
+        sig = inspect.signature(cls)
+        n_rows = len(df)
+        
+        for param_name, param in sig.parameters.items():
+            if param_name not in kwargs:
+                if param.annotation == np.ndarray:
+                    kwargs[param_name] = np.full(n_rows, np.nan)
+                elif param.default == inspect.Parameter.empty:
+                    kwargs[param_name] = None
+                    
+        return cls(**kwargs)

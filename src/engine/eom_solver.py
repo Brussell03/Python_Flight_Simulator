@@ -246,6 +246,7 @@ class eom_solver:
         auxillary_data[AuxIdxSlices.MOMENT_SLICE] = moments
         auxillary_data[AuxIdxSlices.WIND_SLICE] = [W_N_mps, W_E_mps, W_D_mps]
         if x_trim_ref is not None: auxillary_data[AuxIdxSlices.TRIM_SLICE] = x_trim_ref[TrimStateIdxSlices.ACT_TRIM_SLICE]
+        else: auxillary_data[AuxIdxSlices.TRIM_SLICE] = 0, 0, 0, 0
 
         return dx, auxillary_data
 

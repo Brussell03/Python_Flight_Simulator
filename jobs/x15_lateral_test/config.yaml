@@ -19,12 +19,18 @@ instructions:
     analysis:
         comparison:
             enabled: true
-            path: "comparison_data/X15_Rudder_Pulse_FT.npz"
+            external_data: false
+            path: "flight_data/X15_Rudder_Pulse_FT.npz"
             save_compare: true
-            show_plots: true
-        linearization:
-            enabled: false
-            t_s: 30
+            plot_values: true
+            show_values: true
+            plot_error: false
+            show_error: false
+            plots:
+                6dof: true
+                controls: true
+                aerodynamics: true
+                geodetic: true
 
 output:
     save_data: true
@@ -61,12 +67,17 @@ initial_conditions:
 
 control:
     type: "time_history"
-    input_file: "comparison_data/.csv"
-    aileron: true   # on if control input should act through it
-    elevator: false # on if control input should act through it
-    rudder: true    # on if control input should act through it
+    aileron:
+        enabled: true   # on if control input should act through it
+        input_file: "flight_data/lateral_flight_test_aileron_time_history_Yancey64.csv"
+    elevator:
+        enabled: false  # on if control input should act through it
+    rudder:
+        enabled: true   # on if control input should act through it
+        input_file: "flight_data/lateral_flight_test_rudder_time_history_Yancey64.csv"
     sas: true
     Kq: 8
     Kp: 0
     Kyar: 0
     Kr: 0
+    speedbrake: true

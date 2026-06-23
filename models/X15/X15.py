@@ -1,4 +1,5 @@
 import math
+import os
 import numpy as np
 import pandas as pd
 from src.engine.state_mapping import StateIdxSlices, TrimStateIdxSlices
@@ -15,8 +16,14 @@ from models.X15.engine.XLR99 import calculate_fuel_burn_rate
 from src.utils.constants import D2R, FT2M, LB2KG, R2D
 from src.utils.interpolators import fastInterp1, fastInterp2
 
+def resolve_path(base_dir, path):
+    # Join only if path is relative
+    if path and not os.path.isabs(path):
+        return os.path.join(base_dir, path)
+    return path
+
 class X15(Vehicle):
-    def __init__(self, data_path='models/X15/aerodynamic_model/X15_aerodynamic_database.npz', time_history_path=None):
+    def __init__(self, data_path='models/X15/aerodynamic_model/X15_aerodynamic_database.npz', base_dir=None, control_cfg=None):
         
         # Load database into memory once
         self.db = np.load(data_path)
@@ -42,13 +49,17 @@ class X15(Vehicle):
         self.lim_r_rate_rps = 50.0 * D2R
         
         # --- Time History Data ---
-        self.time_history_s = None
+        self.aileron_time_history_bps_s = None
         self.aileron_time_history_deg = None
+        
+        self.elevator_time_history_bps_s = None
         self.elevator_time_history_deg = None
+        
+        self.rudder_time_history_bps_s = None
         self.rudder_time_history_deg = None
         
-        if time_history_path is not None:
-            self._load_time_history(time_history_path)
+        if base_dir is not None and control_cfg is not None and control_cfg.get('type') == 'time_history':
+            self._load_time_histories(base_dir, control_cfg)
         
         # Initialize Aerodynamic Derivatives and other tables
         self._init_tables()
@@ -69,16 +80,34 @@ class X15(Vehicle):
     def m_wet_kg(self) -> float:
         return 33000 * LB2KG
     
-    def _load_time_history(self, path):
-        """
-        Extracts arrays from a dictionary-structured .npy file.
-        Expects keys: 'time', 'elevator', 'aileron', 'rudder'.
-        """
-        time_hist_data                 = pd.read_csv(path, header=0)
-        self.time_history_s            = time_hist_data.get('x').values if time_hist_data.get('x') is not None else None
-        self.elevator_time_history_deg = time_hist_data.get('dele_deg_vs_time_s').values if time_hist_data.get('dele_deg_vs_time_s') is not None else None
-        self.aileron_time_history_deg  = time_hist_data.get('dela_deg_vs_time_s').values if time_hist_data.get('dela_deg_vs_time_s') is not None else None
-        self.rudder_time_history_deg   = time_hist_data.get('delr_deg_vs_time_s').values if time_hist_data.get('delr_deg_vs_time_s') is not None else None
+    def _load_time_histories(self, base_dir, control_cfg):
+        aileron_cfg = control_cfg.get('aileron', {})
+        elevator_cfg = control_cfg.get('elevator', {})
+        rudder_cfg = control_cfg.get('rudder', {})
+        
+        # Resolve Path for Aileron Input
+        raw_path = aileron_cfg.get('input_file', None)
+        if raw_path is not None:
+            path = resolve_path(base_dir, raw_path)
+            time_hist_data                  = pd.read_csv(path, header=0)
+            self.aileron_time_history_bps_s = time_hist_data.get('x').values if time_hist_data.get('x') is not None else None
+            self.aileron_time_history_deg   = time_hist_data.get('dela_deg_vs_time_s').values if time_hist_data.get('dela_deg_vs_time_s') is not None else None
+        
+        # Resolve Path for Elevator Input
+        raw_path = elevator_cfg.get('input_file', None)
+        if raw_path is not None:
+            path = resolve_path(base_dir, raw_path)
+            time_hist_data                   = pd.read_csv(path, header=0)
+            self.elevator_time_history_bps_s = time_hist_data.get('x').values if time_hist_data.get('x') is not None else None
+            self.elevator_time_history_deg   = time_hist_data.get('dele_deg_vs_time_s').values if time_hist_data.get('dele_deg_vs_time_s') is not None else None
+        
+        # Resolve Path for Rudder Input
+        raw_path = rudder_cfg.get('input_file', None)
+        if raw_path is not None:
+            path = resolve_path(base_dir, raw_path)
+            time_hist_data                  = pd.read_csv(path, header=0)
+            self.rudder_time_history_bps_s  = time_hist_data.get('x').values if time_hist_data.get('x') is not None else None
+            self.rudder_time_history_deg    = time_hist_data.get('delr_deg_vs_time_s').values if time_hist_data.get('delr_deg_vs_time_s') is not None else None
 
     def _init_tables(self):
         """Initializes constant aerodynamic derivatives and other tables."""
@@ -269,7 +298,7 @@ class X15(Vehicle):
     def pitch_control(self, t_s, q_b_rps, cmod):
         dele_stick_deg = 0.0
         
-        if cmod["elevator"]:
+        if cmod.get("elevator", {}).get("enabled", False):
             # Determine pilot input type
             input_type = cmod.get("type", "doublet")
             
@@ -279,8 +308,8 @@ class X15(Vehicle):
                     dele_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
             
             elif input_type == "time_history":
-                if self.time_history_s is not None and self.elevator_time_history_deg is not None:
-                    dele_stick_deg = fastInterp1(self.time_history_s, self.elevator_time_history_deg, t_s)
+                if self.elevator_time_history_bps_s is not None and self.elevator_time_history_deg is not None:
+                    dele_stick_deg = fastInterp1(self.elevator_time_history_bps_s, self.elevator_time_history_deg, t_s)
         
         # SAS feedback applied conditionally
         dele_sas_deg = cmod["Kq"] * q_b_rps if cmod["sas"] else 0.0
@@ -292,7 +321,7 @@ class X15(Vehicle):
     def roll_control(self, t_s, p_b_rps, r_b_rps, cmod):
         dela_stick_deg = 0.0
         
-        if cmod["aileron"]:
+        if cmod.get("aileron", {}).get("enabled", False):
             # Determine pilot input type
             input_type = cmod.get("type", "doublet")
             
@@ -302,8 +331,8 @@ class X15(Vehicle):
                     dela_stick_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
             
             elif input_type == "time_history":
-                if self.time_history_s is not None and self.aileron_time_history_deg is not None:
-                    dela_stick_deg = fastInterp1(self.time_history_s, self.aileron_time_history_deg, t_s)
+                if self.aileron_time_history_bps_s is not None and self.aileron_time_history_deg is not None:
+                    dela_stick_deg = fastInterp1(self.aileron_time_history_bps_s, self.aileron_time_history_deg, t_s)
         
         # SAS feedback applied conditionally
         dela_sas_deg = (cmod["Kp"] * p_b_rps + cmod["Kyar"] * r_b_rps) if cmod["sas"] else 0.0
@@ -315,7 +344,7 @@ class X15(Vehicle):
     def yaw_control(self, t_s, r_b_rps, cmod):
         delr_pedal_deg = 0.0
         
-        if cmod["rudder"]:
+        if cmod.get("rudder", {}).get("enabled", False):
             # Determine pilot input type
             input_type = cmod.get("type", "doublet")
             
@@ -325,8 +354,8 @@ class X15(Vehicle):
                     delr_pedal_deg = -cmod["amplitude"] if t_s < cmod["t2_s"] else cmod["amplitude"]
             
             elif input_type == "time_history":
-                if self.time_history_s is not None and self.rudder_time_history_deg is not None:
-                    delr_pedal_deg = fastInterp1(self.time_history_s, self.rudder_time_history_deg, t_s)
+                if self.rudder_time_history_bps_s is not None and self.rudder_time_history_deg is not None:
+                    delr_pedal_deg = fastInterp1(self.rudder_time_history_bps_s, self.rudder_time_history_deg, t_s)
         
         # SAS feedback applied conditionally
         delr_sas_deg = cmod["Kr"] * r_b_rps if cmod["sas"] else 0.0

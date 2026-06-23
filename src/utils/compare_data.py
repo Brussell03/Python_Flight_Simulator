@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
+from src.engine.sim_data import SimData
 from src.utils.plotting import SimulatorPlotter
 from src.utils.parse_to_sim_data import parse_all_csvs
 from src.utils.config_parser import resolve_path
@@ -57,15 +58,40 @@ def compare_data_to_files(dataset, compare_cfg, job_dir, title_prefix="", wind_m
     show_values = compare_cfg.get('show_values', True)
     plot_error = compare_cfg.get('plot_error', False)
     show_error = compare_cfg.get('show_error', False)
+    is_external = compare_cfg.get('external_data', True)
     
     save_dir = os.path.join(job_dir, "output/comparisons/") if compare_cfg.get('save_compare', False) else None
     
     datasets = [dataset]
-    sim_datas, file_names = parse_all_csvs(compare_path, wind_model=wind_model)
     
-    for i in range(len(sim_datas)):
-        sim_datas[i].job_name = file_names[i]
-        datasets.append(sim_datas[i])
+    if is_external:
+        sim_datas, file_names = parse_all_csvs(compare_path, wind_model=wind_model)
+        
+        for i in range(len(sim_datas)):
+            sim_datas[i].job_name = file_names[i]
+            datasets.append(sim_datas[i])
+    else:
+        path = Path(compare_path)
+
+        # Determine if input is a single file or a directory
+        if path.is_file():
+            # Validate that the file is actually a .csv
+            if path.suffix not in ('.csv', '.npz'):
+                raise ValueError(f"The provided file '{path.name}' is not a .csv or .npz file.")
+            file_paths = [path]
+        elif path.is_dir():
+            # Glob only .csv and .npz files if it's a directory
+            file_paths = list(path.glob('*.csv'))
+            file_paths += list(path.glob('*.npz'))
+        else:
+            raise FileNotFoundError(f"The path '{compare_path}' does not exist.")
+        
+        # parse all csvs and npzs
+        for file_path in file_paths:
+            if path.suffix == '.csv':
+                datasets.append(SimData.from_csv(file_path))
+            elif path.suffix == '.npz':
+                datasets.append(SimData.from_npz(file_path))
 
     # Setup the output directory
     if save_dir is not None:

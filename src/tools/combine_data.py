@@ -15,8 +15,8 @@ COLUMN_MAP = {
     'u_mps_vs_time_s': 'u_b_mps', 'v_mps_vs_time_s': 'v_b_mps', 'w_mps_vs_time_s': 'w_b_mps',
     'p_rps_vs_time_s': 'p_b_rps', 'q_rps_vs_time_s': 'q_b_rps', 'r_rps_vs_time_s': 'r_b_rps',
     'q0_vs_time_s': 'q0', 'q1_vs_time_s': 'q1', 'q2_vs_time_s': 'q2', 'q3_vs_time_s': 'q3',
-    'lat_rad_vs_time_s': 'lat_rad', 'long_rad_vs_time_s': 'long_rad', 'altitude_ft_vs_time_s': 'h_m',
-    'dela_deg_vs_time_s': 'dela_ach_deg', 'dele_deg_vs_time_s': 'dele_ach_deg', 'delr_deg_vs_time_s': 'delr_ach_deg',
+    'lat_rad_vs_time_s': 'lat_rad', 'long_rad_vs_time_s': 'long_rad', 'altitude_ft_vs_time_s': 'h_m', 'h_ft_vs_time_s': 'h_m',
+    'dela_deg_vs_time_s': 'dela_ach_rad', 'dele_deg_vs_time_s': 'dele_ach_rad', 'delr_deg_vs_time_s': 'delr_ach_rad',
     'm_fuel_kg_vs_time_s': 'm_fuel_kg',
     'Mach_vs_time_s': 'mach',
     'alpha_deg_vs_time_s': 'alpha_rad', 'beta_deg_vs_time_s': 'beta_rad',
@@ -51,21 +51,16 @@ def get_unit_conversion(col_name, attr_name):
         conversion_msg = "(Converted ft -> m)"
         
     # Angles
-    rad_attrs = {'p_b_rps', 'q_b_rps', 'r_b_rps', 'lat_rad', 'long_rad',
-                 'alpha_rad', 'beta_rad', 'phi_rad', 'theta_rad', 'psi_rad',
-                 'p_nb_rps', 'q_nb_rps', 'r_nb_rps', 'phi_dot_rps', 'theta_dot_rps', 'psi_dot_rps'}
+    rad_attrs = {
+        'p_b_rps', 'q_b_rps', 'r_b_rps', 'lat_rad', 'long_rad',
+        'alpha_rad', 'beta_rad', 'phi_rad', 'theta_rad', 'psi_rad',
+        'p_nb_rps', 'q_nb_rps', 'r_nb_rps', 'phi_dot_rps', 'theta_dot_rps', 'psi_dot_rps',
+        'dela_ach_rad', 'dele_ach_rad', 'delr_ach_rad'
+    }
     
     if attr_name in rad_attrs and '_deg_' in col_lower:
         factor = D2R
         conversion_msg = "(Converted deg -> rad)"
-        
-    # Control Surfaces
-    deg_attrs = {'dela_ach_deg', 'dele_ach_deg', 'delr_ach_deg', 
-                 'dela_cmd_deg', 'dele_cmd_deg', 'delr_cmd_deg'}
-                 
-    if attr_name in deg_attrs and '_rad_' in col_lower:
-        factor = R2D
-        conversion_msg = "(Converted rad -> deg)"
         
     return factor, conversion_msg
 
@@ -119,9 +114,11 @@ def combine_data(file_paths, dt=0.01, output_name="Combined_Data", data_name="Fl
     t_common = np.arange(t_start, t_end + dt, dt)
     n_time_bps = len(t_common)
     
-    # Initialize the structured dictionary dynamically from the dataclass fields
-    # Populate entirely with np.nan to avoid float casting errors on missing data
-    sim_data_kwargs = {field.name: np.full(n_time_bps, np.nan) for field in dataclasses.fields(SimData)}
+    # Explicitly target only numpy array fields for NaN initialization
+    sim_data_kwargs = {}
+    for field in dataclasses.fields(SimData):
+        if field.type is np.ndarray:
+            sim_data_kwargs[field.name] = np.full(n_time_bps, np.nan)
     sim_data_kwargs['t_s'] = t_common
     
     print(f"\n--- Interpolating Data to Master Time Vector (dt={dt}s) ---")
@@ -134,24 +131,23 @@ def combine_data(file_paths, dt=0.01, output_name="Combined_Data", data_name="Fl
         time_sample = ds['t']
         data_sample = ds['data']
         
-        for ii in range(n_time_bps):
-            interpolated_data[ii] = fastInterp1(time_sample, data_sample, t_common[ii])
-            
+        interpolated_data = np.interp(t_common, time_sample, data_sample)
+        
         # Overwrite the NaN array with interpolated data
         sim_data_kwargs[ds['attr_name']] = interpolated_data
 
     # Instantiate the Dataclass to enforce schema compliance
     sim_data_obj = SimData(**sim_data_kwargs)
+    sim_data_obj.job_name = data_name
+    sim_data_obj.description = data_name
 
     # 4. Save to .npz format
     out_dir = "./combined_data/"
     os.makedirs(out_dir, exist_ok=True)
     
-    save_path = os.path.join(out_dir, f"{output_name}.npz")
-    meta = {'job_name': output_name, 'data_name': data_name}
-    
-    # Serialize the underlying fields using asdict
-    np.savez(save_path, **dataclasses.asdict(sim_data_obj), meta=meta)
+    save_path = os.path.join(out_dir, output_name)
+    sim_data_obj.save_npz(save_path + ".npz")
+    sim_data_obj.save_csv(save_path + ".csv", dt=dt)
     
     print(f"\n--- Combination Complete ---")
     print(f"Data saved to: {save_path}")

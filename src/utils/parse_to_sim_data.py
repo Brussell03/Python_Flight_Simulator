@@ -169,7 +169,11 @@ def parse_csvs(file_paths, dt=0.01, wind_model=None):
     n_time_bps = len(t_common)
     
     # Initialize full arrays with NaN to prevent casting bugs
-    sim_data_kwargs = {field.name: np.full(n_time_bps, np.nan) for field in dataclasses.fields(SimData)}
+    # Explicitly target only numpy array fields for NaN initialization
+    sim_data_kwargs = {}
+    for field in dataclasses.fields(SimData):
+        if field.type is np.ndarray:
+            sim_data_kwargs[field.name] = np.full(n_time_bps, np.nan)
     sim_data_kwargs['t_s'] = t_common
     
     # print(f"\n--- Interpolating Data to Master Time Vector (dt={dt}s) ---")

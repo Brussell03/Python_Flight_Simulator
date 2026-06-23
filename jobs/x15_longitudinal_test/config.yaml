@@ -20,9 +20,18 @@ instructions:
     analysis:
         comparison:
             enabled: true
-            path: "comparison_data/X15_Stabilizer_Pulse_FT.npz"
+            external_data: false
+            path: "flight_data/X15_Stabilizer_Pulse_FT.npz"
             save_compare: true
-            show_plots: true
+            plot_values: true
+            show_values: true
+            plot_error: false
+            show_error: false
+            plots:
+                6dof: true
+                controls: true
+                aerodynamics: true
+                geodetic: true
         linearization:
             enabled: false
             t_s: 30
@@ -62,7 +71,7 @@ initial_conditions:
 
 control:
     type: "time_history"
-    input_file: "comparison_data/longitudinal_flight_test_elevator_time_history_Yancey64.csv"
+    input_file: "flight_data/longitudinal_flight_test_elevator_time_history_Yancey64.csv"
     aileron: false # on if control input should act through it
     elevator: true # on if control input should act through it
     rudder: false  # on if control input should act through it

@@ -99,15 +99,9 @@ def load_simulation_config(yaml_path):
     control_cfg = config.get('control', {})
     wind_cfg = config.get('wind', {})
     
-    # Resolve Path for Control Input
-    th_path = None
-    if control_cfg.get('type') == 'time_history':
-        raw_path = control_cfg.get('input_file')
-        th_path = resolve_path(base_dir, raw_path)
-
     # Instantiate Vehicle Model Factory
     if config['vehicle']['model'] == 'X15':
-        vehicle = X15(time_history_path=th_path)
+        vehicle = X15(base_dir=base_dir, control_cfg=control_cfg)
     elif config['vehicle']['model'] == 'Dragless Cannonball':
         vehicle = DraglessCannonball()
     elif config['vehicle']['model'] == 'Cannonball':
@@ -120,8 +114,6 @@ def load_simulation_config(yaml_path):
         vehicle = F16()
     elif config['vehicle']['model'] == 'F16_Circumnavigate':
         vehicle = F16_Circumnavigate()
-    elif config['vehicle']['model'] == 'X15':
-        vehicle = X15(time_history_path=th_path)
     else:
         raise ValueError(f"Unknown vehicle model: {config['vehicle']['model']}")
     
