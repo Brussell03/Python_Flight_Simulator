@@ -81,7 +81,7 @@ def flight_path_angle_check(phi0_rad, theta0_rad, psi0_rad, u0_bf_mps, v0_bf_mps
             f"which contradicts the configured/derived target gamma of {math.degrees(gamma_rad):.2f}°."
         )
 
-def load_job_config(yaml_path):
+def load_job_config(yaml_path, log_details=False):
     """
     Parses the YAML config and returns the required simulation objects.
     """
@@ -98,6 +98,9 @@ def load_job_config(yaml_path):
     trim_cfg = config.get('trim', {})
     control_cfg = config.get('control', {})
     wind_cfg = config.get('wind', {})
+    
+    if instruction_cfg is None or meta_cfg is None:
+        return False
     
     # Instantiate Vehicle Model Factory
     if config['vehicle']['model'] == 'X15':
@@ -295,29 +298,30 @@ def load_job_config(yaml_path):
     x0[StateIdx.DELR_ACH_RAD] = delr_ach_rad
     x0[StateIdx.DELT_ACH_PCT] = delt_ach_pct
     
-    print("Initial vehicle state:")
-    print(f"u0_b_mps: {u0_b_mps:.8f}")
-    print(f"v0_b_mps: {v0_b_mps:.8f}")
-    print(f"w0_b_mps: {w0_b_mps:.8f}")
-    print(f"p0_b_dps: {p0_b_rps*R2D:.8f}")
-    print(f"q0_b_dps: {q0_b_rps*R2D:.8f}")
-    print(f"r0_b_dps: {r0_b_rps*R2D:.8f}")
-    if alpha_cfg is not None: print(f"alpha_cfg: {alpha_cfg*R2D:.8f}")
-    print(f"beta_deg: {beta_rad*R2D:.8f}")
-    print(f"phi0_deg: {phi0_rad*R2D:.8f}")
-    print(f"theta0_deg: {theta0_rad*R2D:.8f}")
-    print(f"psi0_deg: {psi0_rad*R2D:.8f}")
-    # print(f"q0_e: {q0_e:.8f}")
-    # print(f"q1_e: {q1_e:.8f}")
-    # print(f"q2_e: {q2_e:.8f}")
-    # print(f"q3_e: {q3_e:.8f}")
-    print(f"x0_e: {x0_e:.8f}")
-    print(f"y0_e: {y0_e:.8f}")
-    print(f"z0_e: {z0_e:.8f}")
-    print(f"m_fuel_kg: {m_fuel_kg:.8f}")
-    print(f"dela_ach_deg: {dela_ach_rad*R2D:.8f}")
-    print(f"dele_ach_deg: {dele_ach_rad*R2D:.8f}")
-    print(f"delr_ach_deg: {delr_ach_rad*R2D:.8f}")
-    print(f"delt_ach_pct: {delt_ach_pct:.8f}")
+    if log_details:
+        print("Initial vehicle state:")
+        print(f"u0_b_mps: {u0_b_mps:.8f}")
+        print(f"v0_b_mps: {v0_b_mps:.8f}")
+        print(f"w0_b_mps: {w0_b_mps:.8f}")
+        print(f"p0_b_dps: {p0_b_rps*R2D:.8f}")
+        print(f"q0_b_dps: {q0_b_rps*R2D:.8f}")
+        print(f"r0_b_dps: {r0_b_rps*R2D:.8f}")
+        if alpha_cfg is not None: print(f"alpha_cfg: {alpha_cfg*R2D:.8f}")
+        print(f"beta_deg: {beta_rad*R2D:.8f}")
+        print(f"phi0_deg: {phi0_rad*R2D:.8f}")
+        print(f"theta0_deg: {theta0_rad*R2D:.8f}")
+        print(f"psi0_deg: {psi0_rad*R2D:.8f}")
+        # print(f"q0_e: {q0_e:.8f}")
+        # print(f"q1_e: {q1_e:.8f}")
+        # print(f"q2_e: {q2_e:.8f}")
+        # print(f"q3_e: {q3_e:.8f}")
+        print(f"x0_e: {x0_e:.8f}")
+        print(f"y0_e: {y0_e:.8f}")
+        print(f"z0_e: {z0_e:.8f}")
+        print(f"m_fuel_kg: {m_fuel_kg:.8f}")
+        print(f"dela_ach_deg: {dela_ach_rad*R2D:.8f}")
+        print(f"dele_ach_deg: {dele_ach_rad*R2D:.8f}")
+        print(f"delr_ach_deg: {delr_ach_rad*R2D:.8f}")
+        print(f"delt_ach_pct: {delt_ach_pct:.8f}")
 
     return eom, meta_cfg, instruction_cfg, output_cfg, trim_cfg, x0, base_dir

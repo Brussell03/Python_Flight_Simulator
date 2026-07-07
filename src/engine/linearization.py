@@ -5,7 +5,7 @@ import math
 
 from src.engine.state_mapping import StateIdx, AuxIdx, StateIdxSlices, TrimStateIdx, TrimStateIdxSlices
 
-def compute_numerical_jacobians(eom, t, x, x_trim_ref):
+def compute_numerical_jacobians(eom, t, x, x_trim_ref, log_details=False):
     """
     Computes A and B matrices via central difference perturbation.
     """
@@ -32,10 +32,10 @@ def compute_numerical_jacobians(eom, t, x, x_trim_ref):
     ])
     du_pert = np.array([1e-4, 1e-4, 1e-4, 0.01])
 
-    print("\n[Linearization] Computing System Jacobians...")
+    if log_details: print("\n[Linearization] Computing System Jacobians...")
     
     cmod['linearization_flag'] = True
-    u_trim = x_trim_ref[TrimStateIdxSlices.ACT_TRIM_SLICE]
+    u_trim = x_trim_ref[TrimStateIdxSlices.ACT_TRIM_SLICE] if x_trim_ref is not None else x[StateIdxSlices.ACT_SLICE]
     cmod['dela_cmd_rad'], cmod['dele_cmd_rad'], cmod['delr_cmd_rad'], cmod['delt_cmd_pct'] = u_trim
 
     # Compute A Matrix (State Perturbations)
@@ -90,15 +90,16 @@ def build_state_space_model(A, B, state_names, control_names):
     sys.output_labels = state_names
     return sys
 
-def analyze_eigenvalues(sys):
+def analyze_eigenvalues(sys, log_details=False):
     """
     Extracts and prints eigenvalues, damping ratios, and natural frequencies.
     """
-    print(f"\n{'='*60}")
-    print(f"{'SYSTEM EIGENVALUES & MODES':^60}")
-    print(f"{'='*60}")
-    print(f"{'Mode/State':<15} | {'Eigenvalue':<20} | {'Damping (ζ)':<10} | {'Freq (ωn) [rad/s]':<15}")
-    print("-" * 60)
+    if log_details:
+        print(f"\n{'='*60}")
+        print(f"{'SYSTEM EIGENVALUES & MODES':^60}")
+        print(f"{'='*60}")
+        print(f"{'Mode/State':<15} | {'Eigenvalue':<20} | {'Damping (ζ)':<10} | {'Freq (ωn) [rad/s]':<15}")
+        print("-" * 60)
     
     poles = sys.poles()
     
@@ -112,7 +113,7 @@ def analyze_eigenvalues(sys):
         label = sys.state_labels[i] if i < len(sys.state_labels) else f"Mode {i}"
         
         complex_str = f"{np.real(p):.4f} {'+' if np.imag(p)>=0 else '-'} {np.abs(np.imag(p)):.4f}j"
-        print(f"{label:<15} | {complex_str:<20} | {zeta:<10.4f} | {wn:<15.4f}")
+        if log_details: print(f"{label:<15} | {complex_str:<20} | {zeta:<10.4f} | {wn:<15.4f}")
 
 def _plot_poles_only(sys):
     """Helper method to plot only eigenvalues for non-square state-space matrices."""
@@ -204,7 +205,7 @@ def plot_linear_response(sys, t_end=30.0, input_idx=0, show=True):
     if show:
         plt.show()
 
-def execute_linearization_commands(linearization_cfg, eom, t, x, x_trim_ref, state_names, control_names):
+def execute_linearization_commands(linearization_cfg, eom, t, x, x_trim_ref, state_names, control_names, log_details=False):
     """
     Master dispatcher. Routes the YAML configuration to the appropriate analysis methods.
     """

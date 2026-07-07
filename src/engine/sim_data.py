@@ -205,7 +205,7 @@ class SimData:
         # Safe evaluation: Returns None if the attribute was completely stripped or missing
         vehicle_obj = getattr(self, 'vehicle', None)
         if vehicle_obj is not None:
-            print(vehicle_obj)
+            # print(vehicle_obj)
             has_load_factors = not (np.isnan(self.n_x).all() and np.isnan(self.n_y).all() and np.isnan(self.n_z).all())
             if not has_load_factors:
                 vehicle_weight = (self.vehicle.m_dry_kg + self.m_fuel_kg) * self.g_mag_mps2

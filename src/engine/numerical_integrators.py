@@ -45,12 +45,12 @@ def RK4(f, t, x, h_s, x_trim_ref, dx, auxillary_data):
 
     return x_new, auxillary_data
 
-def adaptive_integration(eom_func, t_span, t_eval, x0, x_trim_ref, method='RK45', rtol=1e-6, atol=1e-6):
+def adaptive_integration(eom_func, t_span, t_eval, x0, x_trim_ref, method='RK45', rtol=1e-6, atol=1e-6, log_details=False):
     """
     Adaptive integrator wrapper using scipy's solve_ivp.
     Supports 'RK45', 'RK23', 'DOP853', 'Radau', 'BDF', and 'LSODA'.
     """
-    print(f"[{method} Integration Engine Active]")
+    if log_details: print(f"[{method} Integration Engine Active]")
     
     # Preallocate arrays to prevent memory overhead inside the ODE evaluator
     dx_tmp = np.empty(len(x0), dtype=float)
@@ -72,7 +72,7 @@ def adaptive_integration(eom_func, t_span, t_eval, x0, x_trim_ref, method='RK45'
         atol=atol
     )
 
-    if not res.success:
+    if not res.success and log_details:
         print(f"\n!!! Integration Warning !!!\nSolver terminated early: {res.message}")
 
     x_out = res.y
@@ -90,8 +90,8 @@ def adaptive_integration(eom_func, t_span, t_eval, x0, x_trim_ref, method='RK45'
 
     return t_out, x_out, aux_data_accum
 
-def fixed_integration(eom_func, t_eval, dt, x0, x_trim_ref):
-    print("[Fixed-Step RK4 Integration Engine Active]")
+def fixed_integration(eom_func, t_eval, dt, x0, x_trim_ref, log_details=False):
+    if log_details: print("[Fixed-Step RK4 Integration Engine Active]")
     
     nt_s = t_eval.size
     x = np.zeros((len(x0), nt_s))

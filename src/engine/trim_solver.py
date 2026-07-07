@@ -8,7 +8,7 @@ from src.utils.constants import D2R, R2D
 from src.utils.interpolators import fastInterp1
 from src.utils.math_utils import dcm_to_quat, quat_to_dcm
 
-def trim_solver(eom, tmod, x):
+def trim_solver(eom, tmod, x, log_details=False):
     """
     Finds the trimmed flight state by minimizing linear and angular accelerations subject to kinematic constraints.
     """
@@ -278,7 +278,7 @@ def trim_solver(eom, tmod, x):
             ]
     
     # Setup and Execution
-    print("--- Unpowered Trim Solver ---")
+    if log_details: print("--- Unpowered Trim Solver ---")
     
     eom.control_model['trim_flag'] = eom.control_model.get('trim_flag', False) # Defaults to off if missing
     eom.control_model['linearization_flag'] = eom.control_model.get('linearization_flag', False)
@@ -402,24 +402,25 @@ def trim_solver(eom, tmod, x):
     x_guess[TrimStateIdx.DELR_TRIM_RAD] = delr_target_rad
     x_guess[TrimStateIdx.DELT_TRIM_PCT] = delt_target_pct
     
-    print("\nTrim guess state:")
-    print(f"u_b_mps:   {x_guess[TrimStateIdx.U_B_MPS]:.8f}")
-    print(f"v_b_mps:   {x_guess[TrimStateIdx.V_B_MPS]:.8f}")
-    print(f"w_b_mps:   {x_guess[TrimStateIdx.W_B_MPS]:.8f}")
-    print(f"p_dps:     {x_guess[TrimStateIdx.P_B_RPS]*R2D:.8f}")
-    print(f"q_dps:     {x_guess[TrimStateIdx.Q_B_RPS]*R2D:.8f}")
-    print(f"r_dps:     {x_guess[TrimStateIdx.R_B_RPS]*R2D:.8f}")
-    print(f"phi_deg:   {x_guess[TrimStateIdx.PHI_RAD]*R2D:.8f}")
-    print(f"theta_deg: {x_guess[TrimStateIdx.THETA_RAD]*R2D:.8f}")
-    print(f"psi_deg:   {x_guess[TrimStateIdx.PSI_RAD]*R2D:.8f}")
-    print(f"lat_deg:   {x_guess[TrimStateIdx.LAT_RAD]*R2D:.8f}")
-    print(f"long_deg:  {x_guess[TrimStateIdx.LONG_RAD]*R2D:.8f}")
-    print(f"alt_m:     {x_guess[TrimStateIdx.H_M]:.8f}")
-    print(f"m_fuel_kg: {x_guess[TrimStateIdx.M_FUEL_KG]:.8f}")
-    print(f"dela_deg:  {x_guess[TrimStateIdx.DELA_TRIM_RAD]*R2D:.8f}")
-    print(f"dele_deg:  {x_guess[TrimStateIdx.DELE_TRIM_RAD]*R2D:.8f}")
-    print(f"delr_deg:  {x_guess[TrimStateIdx.DELR_TRIM_RAD]*R2D:.8f}")
-    print(f"delt_pct:  {x_guess[TrimStateIdx.DELT_TRIM_PCT]:.8f}")
+    if log_details: 
+        print("\nTrim guess state:")
+        print(f"u_b_mps:   {x_guess[TrimStateIdx.U_B_MPS]:.8f}")
+        print(f"v_b_mps:   {x_guess[TrimStateIdx.V_B_MPS]:.8f}")
+        print(f"w_b_mps:   {x_guess[TrimStateIdx.W_B_MPS]:.8f}")
+        print(f"p_dps:     {x_guess[TrimStateIdx.P_B_RPS]*R2D:.8f}")
+        print(f"q_dps:     {x_guess[TrimStateIdx.Q_B_RPS]*R2D:.8f}")
+        print(f"r_dps:     {x_guess[TrimStateIdx.R_B_RPS]*R2D:.8f}")
+        print(f"phi_deg:   {x_guess[TrimStateIdx.PHI_RAD]*R2D:.8f}")
+        print(f"theta_deg: {x_guess[TrimStateIdx.THETA_RAD]*R2D:.8f}")
+        print(f"psi_deg:   {x_guess[TrimStateIdx.PSI_RAD]*R2D:.8f}")
+        print(f"lat_deg:   {x_guess[TrimStateIdx.LAT_RAD]*R2D:.8f}")
+        print(f"long_deg:  {x_guess[TrimStateIdx.LONG_RAD]*R2D:.8f}")
+        print(f"alt_m:     {x_guess[TrimStateIdx.H_M]:.8f}")
+        print(f"m_fuel_kg: {x_guess[TrimStateIdx.M_FUEL_KG]:.8f}")
+        print(f"dela_deg:  {x_guess[TrimStateIdx.DELA_TRIM_RAD]*R2D:.8f}")
+        print(f"dele_deg:  {x_guess[TrimStateIdx.DELE_TRIM_RAD]*R2D:.8f}")
+        print(f"delr_deg:  {x_guess[TrimStateIdx.DELR_TRIM_RAD]*R2D:.8f}")
+        print(f"delt_pct:  {x_guess[TrimStateIdx.DELT_TRIM_PCT]:.8f}")
     
     warnings.filterwarnings("ignore", category=RuntimeWarning, message="Values in x were outside bounds during a minimize step")
 
@@ -439,14 +440,14 @@ def trim_solver(eom, tmod, x):
     
     eom.control_model["trim_flag"] = True
 
-    print("\nSolving for trim state...")
+    if log_details: print("\nSolving for trim state...")
     result = minimize(
         fun = cost_function,
         x0 = x_guess,
         method = 'SLSQP',
         bounds = bounds,
         constraints = define_trim_constraints(),
-        options={'disp': True, 'ftol': 1e-9, 'maxiter': 500}
+        options={'disp': log_details, 'ftol': 1e-9, 'maxiter': 500}
     )
     
     eom.control_model["trim_flag"] = False
@@ -553,51 +554,53 @@ def trim_solver(eom, tmod, x):
         theta_rad_dot = q_nb_rps * math.cos(phi_rad) - r_nb_rps * math.sin(phi_rad)
         psi_rad_dot   = (q_nb_rps * math.sin(phi_rad) + r_nb_rps * math.cos(phi_rad)) / math.cos(theta_rad)
         
-        print(f"Trim Successful! Cost function value: {result.fun:.3e}")
-        print("-" * 25)
-        print(f"VT_mps:    {math.sqrt(x_trim[TrimStateIdx.U_B_MPS]**2 + x_trim[TrimStateIdx.V_B_MPS]**2 + x_trim[TrimStateIdx.W_B_MPS]**2):.8f}")
-        print(f"alpha_deg: {math.atan2(x_trim[TrimStateIdx.W_B_MPS], x_trim[TrimStateIdx.U_B_MPS])*R2D:.8f}")
-        print(f"beta_deg:  {math.asin(x_trim[1]/math.sqrt(x_trim[TrimStateIdx.U_B_MPS]**2 + x_trim[TrimStateIdx.V_B_MPS]**2 + x_trim[TrimStateIdx.W_B_MPS]**2))*R2D:.8f}")
-        print(f"p_dps:     {x_trim[TrimStateIdx.P_B_RPS]*R2D:.8f}")
-        print(f"q_dps:     {x_trim[TrimStateIdx.Q_B_RPS]*R2D:.8f}")
-        print(f"r_dps:     {x_trim[TrimStateIdx.R_B_RPS]*R2D:.8f}")
-        print(f"phi_deg:   {phi_rad*R2D:.8f}")
-        print(f"theta_deg: {theta_rad*R2D:.8f}")
-        print(f"psi_deg:   {psi_rad*R2D:.8f}")
-        print(f"lat_deg:   {x_trim[TrimStateIdx.LAT_RAD]*R2D:.8f}")
-        print(f"long_deg:  {x_trim[TrimStateIdx.LONG_RAD]*R2D:.8f}")
-        print(f"alt_m:     {x_trim[TrimStateIdx.H_M]:.8f}")
-        print(f"m_fuel_kg: {x_trim[TrimStateIdx.M_FUEL_KG]:.8f}")
-        print(f"dela_deg:  {x_trim[TrimStateIdx.DELA_TRIM_RAD]*R2D:.8f}")
-        print(f"dele_deg:  {x_trim[TrimStateIdx.DELE_TRIM_RAD]*R2D:.8f}")
-        print(f"delr_deg:  {x_trim[TrimStateIdx.DELR_TRIM_RAD]*R2D:.8f}")
-        print(f"delt_pct:  {x_trim[TrimStateIdx.DELT_TRIM_PCT]:.8f}")
-        print(" ")
-        print(f"u_b_mps-dot:      {dx[StateIdx.U_B_MPS]: .8f}")
-        print(f"v_b_mps-dot:      {dx[StateIdx.V_B_MPS]: .8f}")
-        print(f"w_b_mps-dot:      {dx[StateIdx.W_B_MPS]: .8f}")
-        print(f"p_b_dps-dot:      {dx[StateIdx.P_B_RPS]*R2D: .8f}")
-        print(f"q_b_dps-dot:      {dx[StateIdx.Q_B_RPS]*R2D: .8f}")
-        print(f"r_b_dps-dot:      {dx[StateIdx.R_B_RPS]*R2D: .8f}")
-        print(f"phi_deg-dot:      {phi_rad_dot*R2D: .8f}")
-        print(f"theta_deg-dot:    {theta_rad_dot*R2D: .8f}")
-        print(f"psi_deg-dot:      {psi_rad_dot*R2D: .8f}")
-        print(f"x_e_m-dot:        {dx[StateIdx.X_E_M]: .8f}")
-        print(f"y_e_m-dot:        {dx[StateIdx.Y_E_M]: .8f}")
-        print(f"z_e_m-dot:        {dx[StateIdx.Z_E_M]: .8f}")
-        print(f"m_fuel_kg-dot:    {dx[StateIdx.M_FUEL_KG]: .8f}")
-        print(f"dela_ach_deg-dot: {dx[StateIdx.DELA_ACH_RAD]*R2D: .8f}")
-        print(f"dele_ach_deg-dot: {dx[StateIdx.DELE_ACH_RAD]*R2D: .8f}")
-        print(f"delr_ach_deg-dot: {dx[StateIdx.DELR_ACH_RAD]*R2D: .8f}")
-        print(f"delt_ach_pct-dot: {dx[StateIdx.DELT_ACH_PCT]: .8f}")
-        print(" ")
-        print(f"dela_trim_deg: {x_trim_full[StateIdx.DELA_ACH_RAD]: .8f}")
-        print(f"dele_trim_deg: {x_trim_full[StateIdx.DELE_ACH_RAD]: .8f}")
-        print(f"delr_trim_deg: {x_trim_full[StateIdx.DELR_ACH_RAD]: .8f}")
-        print(f"delt_trim_deg: {x_trim_full[StateIdx.DELT_ACH_PCT]: .8f}")
+        if log_details:
+            print(f"Trim Successful! Cost function value: {result.fun:.3e}")
+            print("-" * 25)
+            print(f"VT_mps:    {math.sqrt(x_trim[TrimStateIdx.U_B_MPS]**2 + x_trim[TrimStateIdx.V_B_MPS]**2 + x_trim[TrimStateIdx.W_B_MPS]**2):.8f}")
+            print(f"alpha_deg: {math.atan2(x_trim[TrimStateIdx.W_B_MPS], x_trim[TrimStateIdx.U_B_MPS])*R2D:.8f}")
+            print(f"beta_deg:  {math.asin(x_trim[1]/math.sqrt(x_trim[TrimStateIdx.U_B_MPS]**2 + x_trim[TrimStateIdx.V_B_MPS]**2 + x_trim[TrimStateIdx.W_B_MPS]**2))*R2D:.8f}")
+            print(f"p_dps:     {x_trim[TrimStateIdx.P_B_RPS]*R2D:.8f}")
+            print(f"q_dps:     {x_trim[TrimStateIdx.Q_B_RPS]*R2D:.8f}")
+            print(f"r_dps:     {x_trim[TrimStateIdx.R_B_RPS]*R2D:.8f}")
+            print(f"phi_deg:   {phi_rad*R2D:.8f}")
+            print(f"theta_deg: {theta_rad*R2D:.8f}")
+            print(f"psi_deg:   {psi_rad*R2D:.8f}")
+            print(f"lat_deg:   {x_trim[TrimStateIdx.LAT_RAD]*R2D:.8f}")
+            print(f"long_deg:  {x_trim[TrimStateIdx.LONG_RAD]*R2D:.8f}")
+            print(f"alt_m:     {x_trim[TrimStateIdx.H_M]:.8f}")
+            print(f"m_fuel_kg: {x_trim[TrimStateIdx.M_FUEL_KG]:.8f}")
+            print(f"dela_deg:  {x_trim[TrimStateIdx.DELA_TRIM_RAD]*R2D:.8f}")
+            print(f"dele_deg:  {x_trim[TrimStateIdx.DELE_TRIM_RAD]*R2D:.8f}")
+            print(f"delr_deg:  {x_trim[TrimStateIdx.DELR_TRIM_RAD]*R2D:.8f}")
+            print(f"delt_pct:  {x_trim[TrimStateIdx.DELT_TRIM_PCT]:.8f}")
+            print(" ")
+            print(f"u_b_mps-dot:      {dx[StateIdx.U_B_MPS]: .8f}")
+            print(f"v_b_mps-dot:      {dx[StateIdx.V_B_MPS]: .8f}")
+            print(f"w_b_mps-dot:      {dx[StateIdx.W_B_MPS]: .8f}")
+            print(f"p_b_dps-dot:      {dx[StateIdx.P_B_RPS]*R2D: .8f}")
+            print(f"q_b_dps-dot:      {dx[StateIdx.Q_B_RPS]*R2D: .8f}")
+            print(f"r_b_dps-dot:      {dx[StateIdx.R_B_RPS]*R2D: .8f}")
+            print(f"phi_deg-dot:      {phi_rad_dot*R2D: .8f}")
+            print(f"theta_deg-dot:    {theta_rad_dot*R2D: .8f}")
+            print(f"psi_deg-dot:      {psi_rad_dot*R2D: .8f}")
+            print(f"x_e_m-dot:        {dx[StateIdx.X_E_M]: .8f}")
+            print(f"y_e_m-dot:        {dx[StateIdx.Y_E_M]: .8f}")
+            print(f"z_e_m-dot:        {dx[StateIdx.Z_E_M]: .8f}")
+            print(f"m_fuel_kg-dot:    {dx[StateIdx.M_FUEL_KG]: .8f}")
+            print(f"dela_ach_deg-dot: {dx[StateIdx.DELA_ACH_RAD]*R2D: .8f}")
+            print(f"dele_ach_deg-dot: {dx[StateIdx.DELE_ACH_RAD]*R2D: .8f}")
+            print(f"delr_ach_deg-dot: {dx[StateIdx.DELR_ACH_RAD]*R2D: .8f}")
+            print(f"delt_ach_pct-dot: {dx[StateIdx.DELT_ACH_PCT]: .8f}")
+            print(" ")
+            print(f"dela_trim_deg: {x_trim_full[StateIdx.DELA_ACH_RAD]: .8f}")
+            print(f"dele_trim_deg: {x_trim_full[StateIdx.DELE_ACH_RAD]: .8f}")
+            print(f"delr_trim_deg: {x_trim_full[StateIdx.DELR_ACH_RAD]: .8f}")
+            print(f"delt_trim_deg: {x_trim_full[StateIdx.DELT_ACH_PCT]: .8f}")
         
         return x_trim_full, x_trim_ref, result.message
     else:
-        print(f"\n!!! TRIM FAILED TO CONVERGE !!!")
-        print(f"Message: {result.message}")
+        if log_details:
+            print(f"\n!!! TRIM FAILED TO CONVERGE !!!")
+            print(f"Message: {result.message}")
         return None, None, result.message
