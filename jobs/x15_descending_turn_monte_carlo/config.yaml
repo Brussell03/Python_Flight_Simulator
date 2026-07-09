@@ -1,0 +1,138 @@
+meta:
+    job_name: "X15_Descending_Turn_Monte_Carlo"
+    description: "X-15 Mach 2.4 Descending Turn Monte Carlo"
+
+vehicle:
+    model: "X15"
+    overrides:
+
+instructions:
+    earth_model: "WGS84"
+    gravity_type: "J2"
+    integrator: "RK45"
+    wind: false
+    perform_trim: true
+    simulation:
+        enabled: true
+        t0_s: 0.0
+        tf_s: 10.0
+        dt_s: 0.005
+    monte_carlo:
+        enabled: true
+        num_runs: 500
+        save_csv: true
+        plots:
+            impact_footprint:
+                type: "2d_density"
+                x: "final_long_deg"
+                y: "final_lat_deg"
+                title: "Monte Carlo Impact Footprint (Lat vs. Long)"
+            mach_distribution:
+                type: "1d_distribution"
+                variable: "max_mach"
+                title: "Maximum Mach Number Distribution"
+                bins: 40
+            altitude_distribution:
+                type: "1d_distribution"
+                variable: "final_alt_m"
+                title: "Terminal Altitude Distribution"
+                bins: 50
+
+output:
+    save_data: true
+    show_plots: true
+    plots:
+        6dof: true
+        attitude: true
+        controls: true
+        aerodynamics: true
+        air_data: true
+        geodetic: true
+        ned_velocity: true
+        forces: true
+        load_factors: true
+        3d_trajectory: true
+
+initial_conditions:
+    Mach:
+        nominal: 2.4
+        dispersion: {type: "gaussian", std: 0.01}
+    alpha_deg:
+        nominal: 1.0
+        dispersion: {type: "uniform", min: -0.5, max: 0.5}
+    beta_deg:
+        nominal: 0.0
+        dispersion: {type: "uniform", min: -0.5, max: 0.5}
+    h_m:
+        nominal: 16500.0
+        dispersion: {type: "gaussian", std: 100.0}
+    phi_deg:
+        nominal: 0.0
+        dispersion: {type: "gaussian", std: 1.0}
+    theta_deg:
+        nominal: 1.0
+        dispersion: {type: "gaussian", std: 1.0}
+    psi_deg:
+        nominal: 0.0
+        dispersion: {type: "gaussian", std: 1.0}
+    dela_ach_deg:
+        nominal: 0.0
+        dispersion: {type: "gaussian", std: 0.01}
+    dele_ach_deg:
+        nominal: 0.0
+        dispersion: {type: "gaussian", std: 0.01}
+    delr_ach_deg:
+        nominal: 0.0
+        dispersion: {type: "gaussian", std: 0.01}
+    lat_deg:
+        nominal: 37.3
+        dispersion: {type: "gaussian", std: 0.01}
+    long_deg:
+        nominal: -115.8
+        dispersion: {type: "gaussian", std: 0.01}
+    m_fuel_kg:
+        nominal: 0.0
+        dispersion: {type: "gaussian", std: 0.0}
+
+trim:
+    trim_mode: "descending_turn"
+    # alpha_deg: 0
+    # beta_deg: 0
+    # h_m: 16500.0
+    # p_dps: 0
+    # q_dps: 0
+    # r_dps: 0
+    # phi_deg: 0
+    theta_deg: -9
+    # psi_deg: 0.0
+    # phidot_dps: 0
+    # thetadot_dps: 0
+    psidot_dps: 2.0
+    dela_ach_deg: -1.0
+    dele_ach_deg: -1.0
+    delr_ach_deg: 1.0
+
+aerodynamics:
+    cd_multiplier:
+    nominal: 1.0
+    dispersion: {type: "gaussian", std: 0.05}
+
+control:
+    type: "doublet"
+    amplitude: 1.5
+    t1_s: 0.0
+    t2_s: 1.0
+    t3_s: 2.0
+    aileron:
+        enabled: false
+    elevator:
+        enabled: false
+    rudder:
+        enabled: false
+    sas: true
+    Kq: 12.0
+    Kp: -6.0
+    Kyar: 8.0
+    Kr: 8.0
+    throttle_percent: 0.0
+    speedbrake: False

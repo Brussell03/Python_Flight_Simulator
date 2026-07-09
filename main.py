@@ -1,4 +1,3 @@
-
 import sys
 import os
 import concurrent
@@ -12,11 +11,12 @@ from rich.table import Table
 from rich import box
 
 from src.utils.compare_data import compare_data_to_files
-from src.engine.config_parser import load_job_config
+from src.engine.config_parser import load_initial_state, load_job_config
 from src.engine.trim_solver import trim_solver
 from src.engine.linearization import execute_linearization_commands
 from src.engine.numerical_integrators import adaptive_integration, fixed_integration
 from src.utils.plotting import SimulatorPlotter
+from src.engine.monte_carlo import run_monte_carlo_suite
 
 def run_job(config_path, disable_plots=False, log_details=True, status_dict=None):
     """
@@ -35,17 +35,19 @@ def run_job(config_path, disable_plots=False, log_details=True, status_dict=None
     # 1. Initialization
     # ==========================================
     update_status("Loading Configuration...")
-    config_payload = load_job_config(config_path, log_details)
+    config_payload = load_job_config(config_path)
     
     # Validation trap for invalid YAML payloads
     if not config_payload:
         update_status("FAILED: Invalid YAML")
         raise ValueError(f"YAML parsing failed or configuration is invalid for: {config_path}")
         
-    eom, meta_cfg, instruction_cfg, output_cfg, trim_cfg, x0, job_dir = config_payload
+    eom, meta_cfg, instruction_cfg, output_cfg, init_cond_cfg, trim_cfg, job_dir = config_payload
     job_name = meta_cfg['job_name']
     
     if log_details: print(f"\n{'='*60}\n--- Starting Job: {job_name} ---\n{'='*60}")
+    
+    x0 = load_initial_state(init_cond_cfg, eom.atmo_model, eom.earth_model, log_details, True)
     
     # ==========================================
     # 2. Initial Trim
@@ -208,8 +210,12 @@ if __name__ == "__main__":
     
     successful_jobs = 0
     failed_jobs = []
+    
+    # ==========================================
+    # PHASE 1: NOMINAL SIMULATION EXECUTION AND ANALYSIS
+    # ==========================================
 
-    # 3. Execution Dispatcher
+    # 1. Execution Dispatcher
     if is_batch:
         print("Batch mode activated. Plot rendering will be disabled to protect system resources.")
         print("Starting multiprocessing pool...\n")
@@ -234,11 +240,11 @@ if __name__ == "__main__":
                 status = status_dict.get(short_name, "Queued...")
                 
                 # Apply dynamic color coding based on status keywords
-                if "COMPLETED" in status: 
+                if "COMPLETED" in status:
                     color = "[bold green]"
-                elif "FAILED" in status: 
+                elif "FAILED" in status:
                     color = "[bold red]"
-                elif "Queued" in status: 
+                elif "Queued" in status:
                     color = "[dim]"
                 else: 
                     color = "[yellow]"
@@ -262,7 +268,7 @@ if __name__ == "__main__":
                     for future in done:
                         cfg_path = futures.pop(future)
                         try:
-                            future.result() 
+                            future.result()
                             successful_jobs += 1
                             # Force a final status update in case the worker missed it
                             short_name = os.path.basename(cfg_path)
@@ -287,7 +293,7 @@ if __name__ == "__main__":
         #     print(f"\n[ERROR] Simulation failed for {cfg_path}: {e}")
         #     failed_jobs.append((cfg_path, str(e)))
 
-    # 4. Batch Summary Report
+    # 2. Batch Summary Report
     print(f"\n{'='*60}")
     print(f"BATCH EXECUTION COMPLETE")
     print(f"Total Jobs: {len(configs_to_run)} | Successful: {successful_jobs} | Failed: {len(failed_jobs)}")
@@ -297,3 +303,33 @@ if __name__ == "__main__":
         for failed_cfg, error_msg in failed_jobs:
             print(f" - {failed_cfg}: {error_msg}")
         sys.exit(1) # Exit with error code if any jobs failed
+    
+    # ==========================================
+    # PHASE 2: MONTE CARLO EXECUTION
+    # ==========================================
+    
+    # Check if any configurations require MC execution
+    mc_jobs_exist = False
+    for cfg_path in configs_to_run:
+        payload = load_job_config(cfg_path)
+        if payload and payload[2].get('monte_carlo', {}).get('enabled', False):
+            mc_jobs_exist = True
+            break
+            
+    if mc_jobs_exist:
+        print(f"\n\n{'#'*60}")
+        print(f"PHASE 2: MONTE CARLO STATISTICAL ANALYSIS")
+        print(f"{'#'*60}")
+        
+        for cfg_path in configs_to_run:
+            # Lightweight load strictly to check instructions
+            config_payload = load_job_config(cfg_path)
+            if not config_payload:
+                continue
+                
+            _, meta_cfg, instruction_cfg, _, _, _, _ = config_payload
+            mc_cfg = instruction_cfg.get('monte_carlo', {})
+            
+            if mc_cfg.get('enabled', False):
+                # Execute the isolated multiprocessing pool for this specific configuration
+                kpi_results = run_monte_carlo_suite(cfg_path, mc_cfg)

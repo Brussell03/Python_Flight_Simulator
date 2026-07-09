@@ -23,6 +23,41 @@ def resolve_path(base_dir, path):
         return os.path.join(base_dir, path)
     return path
 
+def resolve_dispersions(node, nominal_only=True):
+    """
+    Recursively traverses the configuration dictionary.
+    If nominal_only is True, extracts the 'nominal' scalar and ignores dispersions.
+    If nominal_only is False, applies the statistical variance to the 'nominal' value.
+    Leaves standard scalar assignments untouched.
+    """
+    if isinstance(node, dict):
+        # Detect dispersion configuration block
+        if 'nominal' in node:
+            nominal_val = node['nominal']
+            
+            # If we only want the nominal value, or no dispersion is defined, extract the scalar
+            if nominal_only or 'dispersion' not in node:
+                return nominal_val
+            
+            # Otherwise, sample the distribution
+            disp = node['dispersion']
+            if disp['type'] == 'gaussian':
+                return float(np.random.normal(loc=nominal_val, scale=disp['std']))
+            elif disp['type'] == 'uniform':
+                return float(np.random.uniform(low=disp['min'], high=disp['max']))
+            else:
+                return nominal_val
+        else:
+            # Continue traversing deeper dictionaries
+            return {k: resolve_dispersions(v, nominal_only) for k, v in node.items()}
+            
+    elif isinstance(node, list):
+        # Traverse arrays (e.g., waypoint lists)
+        return [resolve_dispersions(v, nominal_only) for v in node]
+        
+    # Return base scalar values (e.g., "Mach: 2.4") unaltered
+    return node
+
 def get_si_value(config_dict, base_name, to_si_factor):
     """
     Retrieves a configuration value and converts it to SI units.
@@ -81,7 +116,7 @@ def flight_path_angle_check(phi0_rad, theta0_rad, psi0_rad, u0_bf_mps, v0_bf_mps
             f"which contradicts the configured/derived target gamma of {math.degrees(gamma_rad):.2f}°."
         )
 
-def load_job_config(yaml_path, log_details=False):
+def load_job_config(yaml_path):
     """
     Parses the YAML config and returns the required simulation objects.
     """
@@ -119,10 +154,6 @@ def load_job_config(yaml_path, log_details=False):
         vehicle = F16_Circumnavigate()
     else:
         raise ValueError(f"Unknown vehicle model: {config['vehicle']['model']}")
-    
-    if init_cond_cfg.get('h_m') is not None and init_cond_cfg.get('h_ft') is not None:
-        raise ValueError("Ambiguous configuration: Cannot specify both 'h_m' and 'h_ft'.")
-    h0_m  = init_cond_cfg['h_m'] if init_cond_cfg.get('h_m') is not None else init_cond_cfg['h_ft'] * FT2M
 
     # Build Atmosphere Model (amod)
     atmosphere = ussa1976.compute()
@@ -131,15 +162,7 @@ def load_job_config(yaml_path, log_details=False):
     c_mps = atmosphere["cs"].values
     p_Npm2 = atmosphere["p"].values
     T_K = atmosphere["t"].values
-    c0_mps = fastInterp1(alt_m, c_mps, h0_m)
     
-    # amod = {
-    #     "alt_m": alt_m,
-    #     "rho_kgpm3": rho_kgpm3,
-    #     "c_mps": c_mps,
-    #     "p_Npm2" : p_Npm2,
-    #     "T_K": T_K
-    # }
     amod = AtmoModel(alt_m, rho_kgpm3, c_mps, p_Npm2, T_K)
     
     earth_type = instruction_cfg.get('earth_model', 'WGS84') # 'WGS84', 'Spherical_Rotating', 'Spherical_NonRotating'
@@ -170,6 +193,24 @@ def load_job_config(yaml_path, log_details=False):
     
     # Instantiate EOM
     eom = eom_solver(earth_model=earth, wind_model=wind_model, atmo_model=amod, vehicle=vehicle, control_model=control_cfg)
+
+    return eom, meta_cfg, instruction_cfg, output_cfg, init_cond_cfg, trim_cfg, base_dir
+
+def load_initial_state(init_cond_cfg, atmo_model, earth_model, log_details=False, nominal=True, seed=None):
+    
+    # Apply reproducible random seed if provided
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # Flatten the configuration dictionary prior to evaluating any math.
+    # If nominal=True, this strips out the dispersion dicts and leaves the nominal scalars.
+    # If nominal=False, it actively samples the defined distributions.
+    init_cond_cfg = resolve_dispersions(init_cond_cfg, nominal_only=nominal)
+    
+    if init_cond_cfg.get('h_m') is not None and init_cond_cfg.get('h_ft') is not None:
+        raise ValueError("Ambiguous configuration: Cannot specify both 'h_m' and 'h_ft'.")
+    h0_m  = init_cond_cfg['h_m'] if init_cond_cfg.get('h_m') is not None else init_cond_cfg['h_ft'] * FT2M
+    c0_mps = atmo_model.get_soundspeed(h0_m)
     
     # --- Parse Attitude First (Required for NED transformations) ---
     phi0_rad = get_si_value(init_cond_cfg, 'phi', D2R) or 0.0
@@ -268,7 +309,7 @@ def load_job_config(yaml_path, log_details=False):
     delt_ach_pct = init_cond_cfg.get('delt_ach_pct', 0)
     
     # Convert Geodetic (Lat, Lon, Alt) to ECEF (X, Y, Z)
-    x0_e, y0_e, z0_e = earth.geodetic_to_ecef(lat0_rad, long0_rad, h0_m)
+    x0_e, y0_e, z0_e = earth_model.geodetic_to_ecef(lat0_rad, long0_rad, h0_m)
     
     # Convert Initial Quaternions from Nav-to-Body to ECEF-to-Body
     # quat_body_to_nav returns C_b2n. The transpose is C_n2b.
@@ -323,5 +364,5 @@ def load_job_config(yaml_path, log_details=False):
         print(f"dele_ach_deg: {dele_ach_rad*R2D:.8f}")
         print(f"delr_ach_deg: {delr_ach_rad*R2D:.8f}")
         print(f"delt_ach_pct: {delt_ach_pct:.8f}")
-
-    return eom, meta_cfg, instruction_cfg, output_cfg, trim_cfg, x0, base_dir
+    
+    return x0;
