@@ -484,13 +484,13 @@ def trim_solver(eom, tmod, x, log_details=False):
     C_b2e = C_e2n.T @ C_b2n
     q0, q1, q2, q3 = dcm_to_quat(C_b2e)
     
-    dx = np.empty((len(StateIdx),), dtype=float)
+    dx = np.empty((StateIdx.NUM_STATES,), dtype=float)
     auxillary_data = np.empty((len(AuxIdx),), dtype=float)
     
     # Construct verified ECEF array for final solve output
     x_e_m, y_e_m, z_e_m = eom.earth_model.geodetic_to_ecef(lat_rad, long_rad, h_m)
 
-    x_trim_full = np.zeros(len(StateIdx))
+    x_trim_full = np.zeros(StateIdx.NUM_STATES)
     x_trim_full[StateIdx.U_B_MPS]      = x_trim[TrimStateIdx.U_B_MPS]
     x_trim_full[StateIdx.V_B_MPS]      = x_trim[TrimStateIdx.V_B_MPS]
     x_trim_full[StateIdx.W_B_MPS]      = x_trim[TrimStateIdx.W_B_MPS]

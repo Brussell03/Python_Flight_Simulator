@@ -4,6 +4,7 @@ import numpy as np
 import yaml
 import ussa1976
 
+from src.environment.sensor_model import SensorModel
 from src.environment.atmo_model import AtmoModel
 from src.engine.state_mapping import StateIdx
 from models.F16.F16 import F16, F16_Circumnavigate
@@ -116,7 +117,7 @@ def flight_path_angle_check(phi0_rad, theta0_rad, psi0_rad, u0_bf_mps, v0_bf_mps
             f"which contradicts the configured/derived target gamma of {math.degrees(gamma_rad):.2f}°."
         )
 
-def load_job_config(yaml_path):
+def load_job_config(yaml_path, seed=None):
     """
     Parses the YAML config and returns the required simulation objects.
     """
@@ -130,6 +131,7 @@ def load_job_config(yaml_path):
     instruction_cfg = config.get('instructions', {})
     output_cfg = config.get('output', {})
     init_cond_cfg = config.get('initial_conditions', {})
+    sensor_cfg = config.get('sensors', {})
     trim_cfg = config.get('trim', {})
     control_cfg = config.get('control', {})
     wind_cfg = config.get('wind', {})
@@ -191,8 +193,10 @@ def load_job_config(yaml_path):
     else:
         wind_model = WindModel(0, 0, 0, 0)
     
+    sensor_model = SensorModel(sensor_cfg, seed)
+    
     # Instantiate EOM
-    eom = eom_solver(earth_model=earth, wind_model=wind_model, atmo_model=amod, vehicle=vehicle, control_model=control_cfg)
+    eom = eom_solver(earth_model=earth, wind_model=wind_model, atmo_model=amod, vehicle=vehicle, control_model=control_cfg, sensor_model=sensor_model)
 
     return eom, meta_cfg, instruction_cfg, output_cfg, init_cond_cfg, trim_cfg, base_dir
 

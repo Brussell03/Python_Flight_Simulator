@@ -14,7 +14,7 @@ def mc_worker_task(config_path, run_id):
     Returns a scalar KPI dictionary to prevent IPC serialization bloat.
     """
     try:
-        config_payload = load_job_config(config_path)
+        config_payload = load_job_config(config_path, seed=run_id)
         if not config_payload:
             return {'run_id': run_id, 'status': 'FAILED: Invalid YAML'}
 

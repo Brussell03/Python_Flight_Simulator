@@ -3,6 +3,7 @@ import numpy as np
 from numba import njit
 from src.engine.sim_data import SimData
 from src.engine.state_mapping import AuxIdx, StateIdxSlices, StateIdx, AuxIdxSlices, TrimStateIdxSlices
+from src.environment.sensor_model import SensorModel, NavigationFilter
 
 from src.utils.math_utils import (
     euler_rates_vectorized, quat_to_dcm, ecef_to_ned_dcm, quat_to_dcm_vectorized, wind_to_body_dcm, b2n_dcm_to_euler,
@@ -171,47 +172,95 @@ def compute_dynamics(x, dx, earth_model, mass_props, mass_props_dot, forces, mom
 # ==========================================
 
 class eom_solver:
-    def __init__(self, earth_model, wind_model, atmo_model, vehicle, control_model):
-        self.earth_model = earth_model     # Jitclass
-        self.wind_model = wind_model       # Jitclass
-        self.atmo_model = atmo_model       # Jitclass
-        self.vehicle = vehicle             # Standard Python Class
-        self.control_model = control_model # Standard Dictionary
+    def __init__(self, earth_model, wind_model, atmo_model, vehicle, control_model, sensor_model):
+        self.earth_model = earth_model
+        self.wind_model = wind_model
+        self.atmo_model = atmo_model
+        self.vehicle = vehicle
+        self.control_model = control_model
+        self.sensor_model = sensor_model
+        self.nav_filter = NavigationFilter()
+        
+        # Zero-Order Hold (ZOH) parameters for continuous integrators
+        self.fsw_update_rate_hz = 200.0 
+        self.fsw_dt = 1.0 / self.fsw_update_rate_hz
+        self.last_fsw_time = -np.inf
+        
+        # Command Cache
+        self.cached_cmds = None
+        self.cached_x_est = None
     
     def solve_eom(self, t, x, dx, auxillary_data, x_trim_ref):
-        p_b_rps, q_b_rps, r_b_rps = x[StateIdxSlices.ROT_SLICE]
+        # Actual achieved states for physical dynamics
         dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct = x[StateIdxSlices.ACT_SLICE]
         
-        # --- 1. COMPILED KINEMATICS ---
-        # Pass arrays and jitclasses directly into the C-compiled engine
-        (q_b2e, C_e2b, C_n2b, C_b2n, C_e2n, C_w2b, 
-         u_air_b_mps, v_air_b_mps, w_air_b_mps, true_airspeed_mps, qbar_kgpms2, Mach, 
-         alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, 
-         lat_rad, long_rad, h_m, p_wind_b_rps, q_wind_b_rps, r_wind_b_rps,
-         W_N_mps, W_E_mps, W_D_mps, rho_kgpm3) = compute_kinematics(
-             x, self.earth_model, self.wind_model, self.atmo_model
-        )
+        # ==========================================
+        # 1. DISCRETE FLIGHT SOFTWARE (GNC & CONTROL)
+        # ==========================================
+        # Only execute estimation and control if a full discrete frame has elapsed.
+        # This protects stateful filters from RK45 backward/micro-steps.
+        if t - self.last_fsw_time >= self.fsw_dt or self.cached_cmds is None:
+            # Calculate actual elapsed time for the EKF (prevents dt=0 on init)
+            actual_dt = self.fsw_dt if self.last_fsw_time > 0 else 0.0
+            self.last_fsw_time = t
 
-        # --- 2. UNCOMPILED PYTHON LOGIC (Vehicle, Dictionaries, Routing) ---
-        self.vehicle.set_gnc_inputs(t, self.control_model, self.atmo_model, lat_rad, long_rad, h_m, 
-                                    alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad, 
-                                    p_b_rps, q_b_rps, r_b_rps, true_airspeed_mps, rho_kgpm3, x_trim_ref)
+            # A. Sensor Measurement
+            x_meas = self.sensor_model.get_measurements(x)
+            
+            # B. State Estimation
+            self.cached_x_est = self.nav_filter.estimate_state(actual_dt, x_meas)
+            
+            # C. Flight Computer Kinematic Resolution
+            # Compute air data and DCMs strictly based on what the vehicle thinks its state is.
+            (q_b2e_est, C_e2b_est, C_n2b_est, C_b2n_est, C_e2n_est, C_w2b_est,
+            u_air_b_mps_est, v_air_b_mps_est, w_air_b_mps_est, true_airspeed_mps_est, qbar_kgpms2_est, Mach_est,
+            alpha_rad_est, beta_rad_est, phi_rad_est, theta_rad_est, psi_rad_est,
+            lat_rad_est, long_rad_est, h_m_est, p_wind_b_rps_est, q_wind_b_rps_est, r_wind_b_rps_est,
+            W_N_mps_est, W_E_mps_est, W_D_mps_est, rho_kgpm3_est) = compute_kinematics(
+                self.cached_x_est, self.earth_model, self.wind_model, self.atmo_model
+            )
+            
+            p_b_rps_est, q_b_rps_est, r_b_rps_est = self.cached_x_est[StateIdxSlices.ROT_SLICE]
+            
+            # D. Control Law Execution
+            # The controller only sees estimated kinematics and estimated states
+            self.vehicle.set_gnc_inputs(t, self.control_model, self.atmo_model, lat_rad_est, long_rad_est, h_m_est,
+                                                alpha_rad_est, beta_rad_est, phi_rad_est, theta_rad_est, psi_rad_est,
+                                                p_b_rps_est, q_b_rps_est, r_b_rps_est, true_airspeed_mps_est, rho_kgpm3_est, x_trim_ref)
+            
+            # Update and cache the new actuator commands
+            dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct = self._route_controls(t, self.cached_x_est, dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct, x_trim_ref)
+
+        if self.control_model.get("type") in ["no_lag", "time_history"]:
+            dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct = dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
+            x[StateIdxSlices.ACT_SLICE] = [dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct]
         
         speedbrake = self.control_model.get("speedbrake", False)
         delsb_deg = 0.0
-
+        
+        # ==========================================
+        # 2. TRUTH KINEMATICS (PHYSICAL ENVIRONMENT)
+        # ==========================================
+        # The physical world operates exclusively on the true state
+        (q_b2e, C_e2b, C_n2b, C_b2n, C_e2n, C_w2b,
+         u_air_b_mps, v_air_b_mps, w_air_b_mps, true_airspeed_mps, qbar_kgpms2, Mach,
+         alpha_rad, beta_rad, phi_rad, theta_rad, psi_rad,
+         lat_rad, long_rad, h_m, p_wind_b_rps, q_wind_b_rps, r_wind_b_rps,
+         W_N_mps, W_E_mps, W_D_mps, rho_kgpm3) = compute_kinematics(
+            x, self.earth_model, self.wind_model, self.atmo_model
+        )
+        
+        p_b_rps, q_b_rps, r_b_rps = x[StateIdxSlices.ROT_SLICE]
+        
         # Air-Relative Rates
         p_air_b_rps = p_b_rps - p_wind_b_rps
         q_air_b_rps = q_b_rps - q_wind_b_rps
         r_air_b_rps = r_b_rps - r_wind_b_rps
 
-        # Actuation & Aerodynamics 
-        dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct = self._route_controls(t, x, dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct, x_trim_ref)
-
-        if self.control_model.get("type") in ["no_lag", "time_history"]:
-            dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct = dela_cmd_rad, dele_cmd_rad, delr_cmd_rad, delt_cmd_pct
-            x[StateIdxSlices.ACT_SLICE] = [dela_ach_rad, dele_ach_rad, delr_ach_rad, delt_ach_pct]
-
+        # ==========================================
+        # 3. TRUTH AERODYNAMICS & DYNAMICS
+        # ==========================================
+        # Aerodynamics generated by the physical environment acting on truth states and actual achieved actuator deflections
         Fx_b, Fy_b, Fz_b, l_b, m_b, n_b = self.vehicle.get_forces_and_moments(
             alpha_rad, beta_rad, Mach, qbar_kgpms2, true_airspeed_mps,
             p_air_b_rps, q_air_b_rps, r_air_b_rps, dele_ach_rad, dela_ach_rad, delr_ach_rad, 
@@ -224,17 +273,19 @@ class eom_solver:
         m_fuel_dot_kgps = self.vehicle.get_engine_burn_rate(delt_ach_pct)
         mass_props_dot = self._compute_inertia_derivatives(m_total_kg, m_fuel_dot_kgps)
 
-        # --- 3. COMPILED DYNAMICS & INTEGRATION ---
         forces = np.array([Fx_b, Fy_b, Fz_b], dtype=np.float64)
         moments = np.array([l_b, m_b, n_b], dtype=np.float64)
         omega_ib_b_rps = np.array([p_b_rps, q_b_rps, r_b_rps], dtype=np.float64)
 
+        # Integration relies on truth properties
         dx, omega_nb_b_rps = compute_dynamics(
             x, dx, self.earth_model, mass_props, mass_props_dot, forces, moments, 
             omega_ib_b_rps, C_e2b, C_e2n, C_n2b, m_fuel_dot_kgps, lat_rad, h_m
         )
 
-        # --- 4. PYTHON ACTUATOR KINEMATICS & AUX DATA ---
+        # ==========================================
+        # 4. ACTUATOR KINEMATICS & AUX DATA
+        # ==========================================
         dx[StateIdx.DELA_ACH_RAD] = self.vehicle.aileron_kinematics(dela_cmd_rad, dela_ach_rad)
         dx[StateIdx.DELE_ACH_RAD] = self.vehicle.elevator_kinematics(dele_cmd_rad, dele_ach_rad)
         dx[StateIdx.DELR_ACH_RAD] = self.vehicle.rudder_kinematics(delr_cmd_rad, delr_ach_rad)

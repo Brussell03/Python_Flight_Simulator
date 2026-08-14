@@ -1,6 +1,6 @@
 meta:
-    job_name: "X15_Descending_Turn"
-    description: "X-15 Mach 2.4 Descending Turn with Trim"
+    job_name: "X15_Descending_Turn_State_Estimation"
+    description: "X-15 Mach 2.4 Descending Turn with State Estimation"
 
 vehicle:
     model: "X15"
@@ -61,6 +61,21 @@ initial_conditions:
     lat_deg: 37.3
     long_deg: -115.8
     m_fuel_kg: 0.0
+
+sensors:
+    enabled: true
+    # If false, the Navigation filter receives perfect truth data
+    imu:
+        gyro_noise_std_dps: 0.1
+        gyro_bias_dps: 0.05
+        accel_noise_std_g: 0.01
+    gps:
+        pos_noise_std_m: 3.0
+        vel_noise_std_mps: 0.2
+    air_data:
+        alpha_noise_std_deg: 0.2
+        beta_noise_std_deg: 0.2
+        mach_noise_std: 0.02
 
 trim:
     trim_mode: "descending_turn"
